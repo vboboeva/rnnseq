@@ -2,11 +2,13 @@ import numpy as np
 import itertools
 from itertools import permutations
 from itertools import combinations
+import string
 
-# '''
-# Adapted from
-# https://stackoverflow.com/questions/10244180/python-generating-integer-partitions
-# '''
+
+'''
+Adapted from
+https://stackoverflow.com/questions/10244180/python-generating-integer-partitions
+'''
 def ruleGen(n, m):
     """
     Generates all interpart restricted compositions of n with first part
@@ -29,7 +31,33 @@ def ruleGen(n, m):
         a[k] = x + y
         yield a[:k + 1]
 
-def findStructures(L, whichm):
+
+def replace_symbols (sequence, symbols):
+    newseq=np.array(list(sequence))
+
+    n_sym_seq = len(np.unique(newseq))
+    n_sym_repl = len(np.array(list(symbols)))
+
+    assert n_sym_seq == n_sym_repl, \
+        f"Trying to replace {n_sym_seq} symbols in sequence "+ \
+        f"with {n_sym_repl} symbols"
+
+    _, id_list = np.unique(newseq, return_index=True)
+
+    symbols_list = [newseq[idx] for idx in sorted(id_list)]
+    # print('symbols_list =', symbols_list)
+   
+    pos_symbols = [np.where(newseq == sym)[0] for sym in symbols_list]
+    # print('pos_symbols =', pos_symbols)
+
+    for i, pos in enumerate(pos_symbols):
+        # print(i, symbols[i], pos)
+        newseq[pos] = symbols[i]
+
+    return "".join(list(newseq))
+
+
+def findStructures(alphabet, L, whichm):
 
     patterns_by_m = []
     for m in range(L):
@@ -42,12 +70,6 @@ def findStructures(L, whichm):
     '''
     for i, comp in enumerate(ruleGen(L,1)):
         patterns_by_m[len(comp)-1].append(comp)
-
-    '''
-    Get all the unique combinations
-    '''
-    for i, comp_list in enumerate(patterns_by_m):
-        patterns_by_m[i] = np.unique(np.sort(np.array(comp_list), axis=1)[:,::-1], axis=0)
 
     '''
     Generate all different templates for each value of 
@@ -74,49 +96,44 @@ def findStructures(L, whichm):
     structures_by_m = []
     for m, templates_list in enumerate(templates_by_m):
         if m+1 == whichm:
-            # print("\n\nnumber of unique letters = ", m+1)
-            # print(templates_list)
-            # continue
             structures_list = []
             for template in templates_list:
-                # print("\ntemplate = ", template)
-                structures_by_template = []
+                '''
+                Find the unique structures by permuting the symbols
+                in `template` and storing only the unique ones -- i.e.
+                those that cannot be obtained by others via in-place
+                replacement of symbols.
+                '''
                 for perm in permutations(list(template)):
                     perm_ = "".join([s for s in perm])
-                    if perm_ not in structures_by_template:
-                        structures_by_template.append(perm_)
-                # print(structures_by_template)
-                structures_list.append(structures_by_template)
-            # print(40*'--')
+                    perm_ = replace_symbols(perm_, alphabet[:whichm])
+                    if perm_ not in structures_list:
+                        structures_list.append(perm_)
             structures_by_m.append(structures_list)
-    # print(40*'*')
+
     return structures_by_m
+
 
 
 if __name__ == "__main__":
 
-    import string
-
-
+    from scipy.special import binom, factorial
+    
     # Length of sequence
     L = 5
     # Number of elements
-    whichm = 2
+    whichm = 3
     # Length of alphabet used
     L_alph = 10
     alphabet = list(string.ascii_lowercase)[:L_alph]
-    print(alphabet)
+    # print(alphabet)
     np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
 
 
-    structures=findStructures(L, whichm)
-    # print(structures)
+    structures=findStructures(alphabet, L, whichm)
     structures = [item for sublist in structures for item in sublist]
-    # print(structures)
-    structures = [item for sublist in structures for item in sublist]
-    # print(structures)
     structures=np.array(structures)
-    np.savetxt('input/structures.txt',structures, fmt='%s')
+    np.savetxt('input/structures_L%d_m%d.txt'%(L, whichm),structures, fmt='%s')
 
     unique=list(set(structures[0]))
     # print(unique)
@@ -126,39 +143,32 @@ if __name__ == "__main__":
 
     # remove the letters already present in the sequences
     letters=alphabet
-    for i in range(len(unique)):
-        letters.remove(unique[i])
+    # for i in range(len(unique)):
+    #     letters.remove(unique[i])
 
-    list_combinations=list(itertools.combinations(alphabet, whichm))
-    # list_combinations=list(itertools.combinations('abcdefghij', whichm))
+    # all permutations of m letters in the alphabet
+    list_permutations=list(itertools.permutations(alphabet, whichm))
+
+    # for perm in list_permutations:
+    #     print("".join(list(perm)))
+
+    # print(len(list_permutations))
+
+
 
     # loop over the individual structures
     for structure in structures:
         possibilities=[]
+        print('structure =', structure)
 
-        # loop over all combinations 
-        for comb in list_combinations:
-            print('structure', structure)
-            print('comb=', comb)
-            newseq=np.array(list(structure))
-            _, id_list = np.unique(newseq, return_index=True)
-            symbols_list = [newseq[idx] for idx in sorted(id_list)]
-
-            print("symbols_list =", symbols_list)
-
-            pos_symbols = [np.where(newseq == sym)[0] for sym in symbols_list]
-
-            print("pos_symbols =", pos_symbols)
-
-            for i, pos in enumerate(pos_symbols):
-                print(i, comb[i], pos)
-                newseq[pos] = comb[i]
-
-            print('newseq after', newseq)
+        # loop over all permutations 
+        for perm in list_permutations:
+            print('perm =', perm)
+            newseq=replace_symbols(structure, perm)
 
             possibilities.append(newseq)
-            print(20*'--')
+            # print(20*'--')
 
 
-        print(len(possibilities))
+        print(structure)
         np.savetxt('input/%s.txt'%structure, possibilities, fmt='%s')
