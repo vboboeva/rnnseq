@@ -118,12 +118,10 @@ if __name__ == "__main__":
         optimizer.zero_grad()
 
         '''
-        train the network to reproduce the input. Expecting:
-        - recurrent weights = 0 (no memory, as inputs are i.i.d.)
-        - product W_out.W_in  prop to identity matrix
+        train the network to produce the next letter
         '''
         ht, hT, y = model(x)
-        loss = F.mse_loss(y, 3*x)
+        loss = F.mse_loss(y[:-1], x[1:])
 
         loss.backward()
         optimizer.step()
