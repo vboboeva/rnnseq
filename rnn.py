@@ -60,6 +60,7 @@ class RNN(nn.Module):
 
         # whole sequence of hidden states, linearly transformed
         y = self.fc(ht)
+        # y = F.softmax(self.fc(ht), dim=2)
 
         return ht, hT, y
 
@@ -86,8 +87,8 @@ if __name__ == "__main__":
     # input_num_units, hidden_num_units, num_layers, output_num_units
     model = RNN(nb_classes, 100, 1, 10, device=device)
 
-    n_epochs = 300
-    batch_size = 1000
+    n_epochs = 100
+    batch_size = 100
 
     # load types
     types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
@@ -107,9 +108,9 @@ if __name__ == "__main__":
             x = dicts[all_tokens[i,j]]
             y = dicts[all_tokens[i,j+1]]
             count[x,y]+=1
-    count /= np.sum(count, axis=1)[:,None]
+    count /= np.sum(count, axis=1)[:, None]
 
-    # create train and test data
+    # turn letters into one hot vectors
     x = torch.zeros((L, len(all_tokens), nb_classes), dtype=torch.float32)
     for i, token in enumerate(tokens):
         pos = []
@@ -117,20 +118,18 @@ if __name__ == "__main__":
             pos = np.append(pos, dicts[letter])
         x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), nb_classes)
 
+    '''
+    make train and test data
+
+    '''    
     frac_train=0.8
     n_train = int(frac_train*len(all_tokens))
     n_test = len(all_tokens) - n_train
-
-    print(n_train)
-    print(n_test)
 
     ids = np.arange(len(all_tokens))
     np.random.shuffle(ids)
     train_ids = ids[:n_train]
     test_ids = ids[n_train:]
-
-    print(train_ids)
-    print(test_ids)
 
     '''
     train and test network
@@ -154,8 +153,10 @@ if __name__ == "__main__":
             X_test = X_test.to(model.device)
             ht, hT, y_test = model(X_test)
             y_test = y_test.to(model.device)
-            loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
+            # loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
+            loss = F.cross_entropy(y_test[:-1].permute(2,0,1), X_test[1:].permute(2,0,1), reduction='mean')
             test_losses.append(loss.item())
+            # print(_, loss.item())
 
         '''
         Calculate train error
@@ -164,14 +165,19 @@ if __name__ == "__main__":
             X_train = X_train.to(model.device)
             ht, hT, y_train = model(X_train)
             y_train = y_train.to(model.device)
-            loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
+            # loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
+            loss = F.cross_entropy(y_train[:-1].permute(2,0,1), X_train[1:].permute(2,0,1), reduction='mean')
             train_losses.append(loss.item())
 
         '''
         train the network to produce the next letter
         '''
 
+        # shuffle 
+
         np.random.shuffle(train_ids)
+
+        # we are training in batches
         
         for batch in range(n_batches):
             optimizer.zero_grad()
@@ -180,12 +186,13 @@ if __name__ == "__main__":
             batch_end = (batch + 1) * batch_size
 
             X_batch = x[:, torch.tensor(train_ids[batch_start:batch_end])]
-
             X_batch = X_batch.to(model.device)
+
             ht, hT, y_batch = model(X_batch)
             y_batch = y_batch.to(model.device)
 
-            loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
+            # loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
+            loss = F.cross_entropy(y_batch[:-1].permute(2,0,1), X_batch[1:].permute(2,0,1), reduction='mean')
 
             loss.backward()
             optimizer.step()
@@ -193,15 +200,10 @@ if __name__ == "__main__":
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    # plt.plot(train_losses)
-    # plt.plot(test_losses)
-    # plt.show()
-    # exit()
     
     fig, axs = plt.subplots(1,3, figsize=(14,4))
     
-    # axs[0].set_xscale("log")
-    # axs[0].set_yscale("log")
+    # axs[0].set_ylim("")
     axs[0].plot(train_losses)
     axs[0].plot(test_losses, ls="--")
     axs[0].set_xlabel('Epoch')
