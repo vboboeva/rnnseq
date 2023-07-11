@@ -17,7 +17,8 @@ import string
 
 
 class RNN(nn.Module):
-    def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, nonlinearity="tanh"):
+    def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, \
+            nonlinearity="tanh", device="cpu"):
         super(RNN, self).__init__()
 
         # Defining the number of layers and the nodes in each layer
@@ -29,6 +30,10 @@ class RNN(nn.Module):
 
         # Fully connected layer
         self.fc = nn.Linear(hidden_num_units, output_num_units)
+
+        self.device = device
+        self.to(self.device)
+
 
     def forward(self, x):
         '''
@@ -46,7 +51,7 @@ class RNN(nn.Module):
         or
         num_layers, hidden_num_units
         '''
-        h0 = torch.randn(self.num_layers, x.shape[1], self.hidden_num_units)
+        h0 = torch.randn(self.num_layers, x.shape[1], self.hidden_num_units).to(self.device)
 
         # ht = sequence of hidden states
         # hT = last hidden state
@@ -75,12 +80,14 @@ if __name__ == "__main__":
     for i, k in enumerate(keys):
         dicts[k] = values[i]
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("device =", device)
+
     # input_num_units, hidden_num_units, num_layers, output_num_units
-    model = RNN(nb_classes, 100, 1, 10)
+    model = RNN(nb_classes, 100, 1, 10, device=device)
 
-    
-
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0)
+    n_epochs = 300
+    batch_size = 1000
 
     # load types
     types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
@@ -92,7 +99,6 @@ if __name__ == "__main__":
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
     all_tokens = np.vstack(all_tokens)
-
     
     # count how many transitions of each kind we have
     count=np.zeros((nb_classes, nb_classes))
@@ -103,46 +109,110 @@ if __name__ == "__main__":
             count[x,y]+=1
     count /= np.sum(count, axis=1)[:,None]
 
-    # create train data
+    # create train and test data
     x = torch.zeros((L, len(all_tokens), nb_classes), dtype=torch.float32)
     for i, token in enumerate(tokens):
         pos = []
         for letter in token:
             pos = np.append(pos, dicts[letter])
         x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), nb_classes)
-    
-    # train network
+
+    frac_train=0.8
+    n_train = int(frac_train*len(all_tokens))
+    n_test = len(all_tokens) - n_train
+
+    print(n_train)
+    print(n_test)
+
+    ids = np.arange(len(all_tokens))
+    np.random.shuffle(ids)
+    train_ids = ids[:n_train]
+    test_ids = ids[n_train:]
+
+    print(train_ids)
+    print(test_ids)
+
+    '''
+    train and test network
+
+    '''
     train_losses = []
-    for _ in tqdm(range(100)):
-        
-        optimizer.zero_grad()
+    test_losses = []
+    n_batches = len(train_ids)//batch_size
+    optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0)
+
+    X_train = x[:,train_ids]
+    X_test = x[:,test_ids]
+
+    for _ in tqdm(range(n_epochs)):
+    # for _ in range(n_epochs):
+
+        '''
+        Calculate test error
+        '''
+        with torch.no_grad():
+            X_test = X_test.to(model.device)
+            ht, hT, y_test = model(X_test)
+            y_test = y_test.to(model.device)
+            loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
+            test_losses.append(loss.item())
+
+        '''
+        Calculate train error
+        '''
+        with torch.no_grad():
+            X_train = X_train.to(model.device)
+            ht, hT, y_train = model(X_train)
+            y_train = y_train.to(model.device)
+            loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
+            train_losses.append(loss.item())
 
         '''
         train the network to produce the next letter
         '''
-        ht, hT, y = model(x)
-        loss = F.mse_loss(y[:-1], x[1:])
 
-        loss.backward()
-        optimizer.step()
+        np.random.shuffle(train_ids)
+        
+        for batch in range(n_batches):
+            optimizer.zero_grad()
 
-        train_losses.append(loss.item())
+            batch_start = batch * batch_size
+            batch_end = (batch + 1) * batch_size
+
+            X_batch = x[:, torch.tensor(train_ids[batch_start:batch_end])]
+
+            X_batch = X_batch.to(model.device)
+            ht, hT, y_batch = model(X_batch)
+            y_batch = y_batch.to(model.device)
+
+            loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
+
+            loss.backward()
+            optimizer.step()
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
-         model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy())
+         model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
+
+    # plt.plot(train_losses)
+    # plt.plot(test_losses)
+    # plt.show()
+    # exit()
     
     fig, axs = plt.subplots(1,3, figsize=(14,4))
     
+    # axs[0].set_xscale("log")
+    # axs[0].set_yscale("log")
     axs[0].plot(train_losses)
+    axs[0].plot(test_losses, ls="--")
     axs[0].set_xlabel('Epoch')
     axs[0].set_ylabel('Training loss')
-    im1 = axs[1].imshow(Wio.T)#, vmin=0, vmax=1)
+    im1 = axs[1].imshow(Wio.T) #, vmin=0, vmax=1)
     axs[1].set_xticks(np.arange(nb_classes))
     axs[1].set_yticks(np.arange(nb_classes))
     axs[1].set_xticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
     axs[1].set_yticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
 
-    im2 = axs[2].imshow(count)#, vmin=0, vmax=1)
+    im2 = axs[2].imshow(count) #, vmin=0, vmax=1)
     axs[2].set_xticks(np.arange(nb_classes))
     axs[2].set_yticks(np.arange(nb_classes))
     axs[2].set_xticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
@@ -151,7 +221,6 @@ if __name__ == "__main__":
     plt.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
     plt.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
     fig.savefig('loss.png')
-
 
     '''
     plot SVD decomposition of weights
