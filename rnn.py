@@ -67,12 +67,24 @@ class RNN(nn.Module):
 
 if __name__ == "__main__":
 
+    # sequence parameters 
+    L=5
+    m=2
+    whichloss='CE'
+
+    # network parameters
+    n_hidden = 100
+    n_layers = 1
+
+    n_epochs = 400
+    batch_size = 10
+
+    # fraction of data used to train
+    frac_train=0.9
+
     # load the number of inputs
     alphabet = loadtxt('input/alphabet.txt', dtype='str')
     nb_classes=len(alphabet)
-    
-    L=5
-    m=5
 
     # make a dictionary
     dicts = {}
@@ -85,10 +97,7 @@ if __name__ == "__main__":
     print("device =", device)
 
     # input_num_units, hidden_num_units, num_layers, output_num_units
-    model = RNN(nb_classes, 100, 1, 10, device=device)
-
-    n_epochs = 100
-    batch_size = 100
+    model = RNN(nb_classes, n_hidden, n_layers, nb_classes, device=device)
 
     # load types
     types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
@@ -100,6 +109,7 @@ if __name__ == "__main__":
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
     all_tokens = np.vstack(all_tokens)
+    # print(np.shape(all_tokens))
     
     # count how many transitions of each kind we have
     count=np.zeros((nb_classes, nb_classes))
@@ -123,12 +133,16 @@ if __name__ == "__main__":
     make train and test data
 
     '''    
-    frac_train=0.8
     n_train = int(frac_train*len(all_tokens))
     n_test = len(all_tokens) - n_train
 
-    ids = np.arange(len(all_tokens))
-    np.random.shuffle(ids)
+    print(f"{n_train} training sequences")
+    print(f"{n_test} testing sequences")
+
+    # torch.manual_seed(0)
+    # print("seed", torch.manual_seed(0))
+    ids = torch.randperm(len(all_tokens))
+    # print('ids', ids)
     train_ids = ids[:n_train]
     test_ids = ids[n_train:]
 
@@ -138,27 +152,33 @@ if __name__ == "__main__":
     '''
     train_losses = []
     test_losses = []
+    train_accuracies = []
+    test_accuracies = []
     n_batches = len(train_ids)//batch_size
     optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0)
 
-    X_train = x[:,train_ids]
-    X_test = x[:,test_ids]
+    X_train = x[:,train_ids,:]
+    X_test = x[:,test_ids,:]
 
-    for _ in tqdm(range(n_epochs)):
     # for _ in range(n_epochs):
-
+    for _ in tqdm(range(n_epochs)):
         '''
-        Calculate test error
+        Calculate test error and accuracy
         '''
         with torch.no_grad():
             X_test = X_test.to(model.device)
             ht, hT, y_test = model(X_test)
             y_test = y_test.to(model.device)
-            # loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
-            loss = F.cross_entropy(y_test[:-1].permute(2,0,1), X_test[1:].permute(2,0,1), reduction='mean')
+            if whichloss == 'CE':
+                loss = F.cross_entropy(y_test[:-1].permute(1,2,0), X_test[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
+            elif whichloss == 'MSE':
+                loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
+            else:
+                print('Loss function not recognized!')
             test_losses.append(loss.item())
-            # print(_, loss.item())
-
+            label = torch.argmax(X_test, dim=-1)
+            pred = torch.argmax(y_test, dim=-1)
+            test_accuracies.append( pred.eq(label).sum().item() / (n_test*L) )
         '''
         Calculate train error
         '''
@@ -166,9 +186,18 @@ if __name__ == "__main__":
             X_train = X_train.to(model.device)
             ht, hT, y_train = model(X_train)
             y_train = y_train.to(model.device)
-            # loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
-            loss = F.cross_entropy(y_train[:-1].permute(2,0,1), X_train[1:].permute(2,0,1), reduction='mean')
+            
+            if whichloss == 'CE':
+                loss = F.cross_entropy(y_train[:-1].permute(1,2,0), X_train[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
+            elif whichloss == 'MSE':
+                loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
+            else:
+                print('Loss function not recognized!')
+
             train_losses.append(loss.item())
+            label = torch.argmax(X_train, dim=-1)
+            pred = torch.argmax(y_train, dim=-1)
+            train_accuracies.append( pred.eq(label).sum().item() / (n_train*L) )
 
         '''
         train the network to produce the next letter
@@ -176,24 +205,31 @@ if __name__ == "__main__":
 
         # shuffle 
 
-        np.random.shuffle(train_ids)
+        _ids = torch.randperm(train_ids.size(0))
+        train_ids = train_ids[_ids]
+        # np.random.shuffle(train_ids)
 
         # we are training in batches
-        
+        accuracy = 0
         for batch in range(n_batches):
             optimizer.zero_grad()
 
             batch_start = batch * batch_size
             batch_end = (batch + 1) * batch_size
 
-            X_batch = x[:, torch.tensor(train_ids[batch_start:batch_end])]
+            X_batch = x[:, train_ids[batch_start:batch_end], :]
             X_batch = X_batch.to(model.device)
+            # print(np.shape(X_batch))
 
             ht, hT, y_batch = model(X_batch)
             y_batch = y_batch.to(model.device)
 
-            # loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
-            loss = F.cross_entropy(y_batch[:-1].permute(2,0,1), X_batch[1:].permute(2,0,1), reduction='mean')
+            if whichloss == 'CE':
+                loss = F.cross_entropy(y_batch[:-1].permute(1,2,0), X_batch[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
+            elif whichloss == 'MSE':
+                loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
+            else:
+                print('Loss function not recognized!')
 
             loss.backward()
             optimizer.step()
@@ -201,69 +237,11 @@ if __name__ == "__main__":
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    
-    fig, axs = plt.subplots(1,3, figsize=(14,4))
-    
-    # axs[0].set_ylim("")
-    axs[0].plot(train_losses)
-    axs[0].plot(test_losses, ls="--")
-    axs[0].set_xlabel('Epoch')
-    axs[0].set_ylabel('Training loss')
-    im1 = axs[1].imshow(Wio.T) #, vmin=0, vmax=1)
-    axs[1].set_xticks(np.arange(nb_classes))
-    axs[1].set_yticks(np.arange(nb_classes))
-    axs[1].set_xticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
-    axs[1].set_yticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
+    A=np.vstack((train_losses, test_losses))
+    B=np.vstack((train_accuracies, test_accuracies))
 
-    im2 = axs[2].imshow(count) #, vmin=0, vmax=1)
-    axs[2].set_xticks(np.arange(nb_classes))
-    axs[2].set_yticks(np.arange(nb_classes))
-    axs[2].set_xticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
-    axs[2].set_yticklabels([string.ascii_lowercase[i] for i in range(nb_classes)])
+    np.savetxt('output/loss_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), A.T)
+    np.savetxt('output/accuracy_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), B.T)
+    np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), Wio)
+    np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), count)
 
-    plt.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
-    plt.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
-    fig.savefig('loss.png')
-
-    '''
-    plot SVD decomposition of weights
-    Rows: 0 - input weights, 1 - recurrent weights, 2 - output weights
-    Cols: 0 - raw, 1 - singular values S, 2 - left singular vectors U, 3 - right singular vectors V
-    '''
-
-    fig, axs = plt.subplots(3,4, figsize=(13,8))
-    plt.tight_layout()
-
-    axs[0,0].set_title("Weights")
-    axs[0,1].set_title("Singular values")
-    axs[0,2].set_title("Left singular vectors, U")
-    axs[0,3].set_title("Right singular vectors, V")
-
-    def plot_svd (weights, title, axs):
-        axs[0].set_ylabel(title)
-        im = axs[0].imshow(weights)
-        plt.colorbar(im, ax=axs[0])
-
-        U, S, Vh = np.linalg.svd(weights)
-
-        # check that Uh.U and Vh.V are identity matrices
-        print(title)
-        # print("U = ", U.shape, np.linalg.norm(np.dot(U.T, U) -  np.eye(len(U)) ) )
-        # print("Vh = ", Vh.shape, np.linalg.norm(np.dot(Vh, Vh.T) -  np.eye(len(Vh)) ) )
-
-        axs[1].plot(S)
-        im = axs[2].imshow(U)
-        plt.colorbar(im, ax=axs[2])
-        im = axs[3].imshow(Vh.T)
-        plt.colorbar(im, ax=axs[3])
-
-    weights = model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy()
-    plot_svd(weights, "weight_ih_l0", axs[0])
-
-    weights = model.rnn.state_dict()["weight_hh_l0"].detach().cpu().numpy()
-    plot_svd(weights, "weight_hh_l0", axs[1])
-    
-    weights = model.fc.state_dict()["weight"].detach().cpu().numpy()
-    plot_svd(weights, "weight_out", axs[2])
-
-    fig.savefig('weights.png')
