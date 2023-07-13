@@ -112,7 +112,8 @@ if __name__ == "__main__":
 
     # turn letters into one hot vectors
     x = torch.zeros((L, len(all_tokens), nb_classes), dtype=torch.float32)
-    for i, token in enumerate(tokens):
+    for i, token in enumerate(all_tokens):
+        # print(token)
         pos = []
         for letter in token:
             pos = np.append(pos, dicts[letter])
