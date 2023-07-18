@@ -56,14 +56,63 @@ class RNN(nn.Module):
         # ht = sequence of hidden states
         # hT = last hidden state
         # ht, hT = self.rnn(x, h0)
+        # print('x',np.shape(x))
         ht, hT = self.rnn(x)
 
         # whole sequence of hidden states, linearly transformed
         y = self.fc(ht)
+        # exit()
         # y = F.softmax(self.fc(ht), dim=2)
 
         return ht, hT, y
 
+
+def predict(letter_to_index, index_to_letter, seq_start, next_letters):
+    # model.eval()
+
+    # print('seqstart', seq_start)
+    with torch.no_grad():
+
+    # starts with a sequence of words of given length, initializes network
+
+        # goes through each of the seq_start we want to predict
+        for i in range(0, next_letters):
+            x = torch.zeros((len(seq_start), alpha), dtype=torch.float32)
+            pos = [letter_to_index[w] for w in seq_start[i:]]
+            # print('pos',pos)
+            for k, p in enumerate(pos):
+                # print(k)
+                x[k,:]= F.one_hot(torch.tensor(p), alpha)
+            # print('heree', x)
+            # y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
+
+            # x has to have dimensions (L, sizetrain, alpha)
+
+            a, b, y_pred = model(x)#.permute(1,0,2)
+            # print('y_pred shape', np.shape(y_pred))
+            # print('y_pred', y_pred)
+            
+
+            # last_letter_logits has dimension alpha
+            last_letter_logits = y_pred[-1,:]
+            # print('logit', last_letter_logits)
+            # print('shape logit', np.shape(last_letter_logits))
+
+            # applies a softmax to transform activations into a proba, has dimensions alpha
+            proba = torch.nn.functional.softmax(last_letter_logits, dim=0).detach().numpy()
+            # print('proba tensor', proba)
+            # print('sum=', np.sum(proba))
+
+            # then samples randomly from that proba distribution 
+            letter_index = np.random.choice(len(last_letter_logits), p=proba)
+
+            # print(letter_index)
+
+            # appends it into the sequence produced
+            seq_start.append(index_to_letter[letter_index])
+
+    # print(seq_start)
+    return seq_start
 
 if __name__ == "__main__":
 
@@ -80,54 +129,60 @@ if __name__ == "__main__":
     batch_size = 10
 
     # fraction of data used to train
-    frac_train=0.9
+    frac_train=.95
 
     # load the number of inputs
-    alphabet = loadtxt('input/alphabet.txt', dtype='str')
-    nb_classes=len(alphabet)
+    alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
 
     # make a dictionary
-    dicts = {}
-    keys = list(string.ascii_lowercase)[:nb_classes]
-    values = np.arange(nb_classes)
+    letter_to_index = {}
+    keys = list(string.ascii_lowercase)[:alpha]
+    values = np.arange(alpha)
     for i, k in enumerate(keys):
-        dicts[k] = values[i]
+        letter_to_index[k] = values[i]
+
+    index_to_letter = {}
+    keys = np.arange(alpha)
+    values = list(string.ascii_lowercase)[:alpha]
+    for i, k in enumerate(keys):
+        index_to_letter[k] = values[i]
+
+    print(index_to_letter)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device =", device)
 
     # input_num_units, hidden_num_units, num_layers, output_num_units
-    model = RNN(nb_classes, n_hidden, n_layers, nb_classes, device=device)
+    model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
 
     # load types
     types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
 
     all_tokens=[]
     # load all the tokens corresponding to that type
-    for t, type_ in enumerate(types):
+    for t, type_ in enumerate(types[:2]):
         tokens = loadtxt('input/%s.txt'%type_, dtype='str')
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
     all_tokens = np.vstack(all_tokens)
-    # print(np.shape(all_tokens))
     
     # count how many transitions of each kind we have
-    count=np.zeros((nb_classes, nb_classes))
+    count=np.zeros((alpha, alpha))
     for i in range(len(all_tokens)):
         for j in range(L-1):
-            x = dicts[all_tokens[i,j]]
-            y = dicts[all_tokens[i,j+1]]
+            x = letter_to_index[all_tokens[i,j]]
+            y = letter_to_index[all_tokens[i,j+1]]
             count[x,y]+=1
     count /= np.sum(count, axis=1)[:, None]
 
     # turn letters into one hot vectors
-    x = torch.zeros((L, len(all_tokens), nb_classes), dtype=torch.float32)
+    x = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
     for i, token in enumerate(all_tokens):
         # print(token)
         pos = []
         for letter in token:
-            pos = np.append(pos, dicts[letter])
-        x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), nb_classes)
+            pos = np.append(pos, letter_to_index[letter])
+        x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), alpha)
 
     '''
     make train and test data
@@ -145,6 +200,9 @@ if __name__ == "__main__":
     # print('ids', ids)
     train_ids = ids[:n_train]
     test_ids = ids[n_train:]
+
+    tokens_train=all_tokens[train_ids,:]
+    tokens_test=all_tokens[test_ids,:]
 
     '''
     train and test network
@@ -203,7 +261,7 @@ if __name__ == "__main__":
         train the network to produce the next letter
         '''
 
-        # shuffle 
+        # shuffle training data so that in each epoch data is split randomly in batches for training
 
         _ids = torch.randperm(train_ids.size(0))
         train_ids = train_ids[_ids]
@@ -233,6 +291,30 @@ if __name__ == "__main__":
 
             loss.backward()
             optimizer.step()
+
+    start=4
+
+    # X_train:  L x len(trainingdata) x alpha
+
+    in_train=[]
+    in_test=[]
+    in_none=[]
+    for i in range(len(X_train[0,:])):
+        se= tokens_train[i]
+        seq = [se[j] for j in range(len(se))]
+        pred_seq = predict(letter_to_index, index_to_letter, seq[:start], L-start)
+        if (tokens_train == pred_seq).all(axis=1).any():
+            print('in train', pred_seq)
+            in_train += [pred_seq]
+        elif (tokens_test == pred_seq).all(axis=1).any():
+            print('in test', pred_seq)
+            in_test += [pred_seq]
+        else:
+            print('in none', pred_seq)
+            in_none +=[pred_seq]
+    print('len in_train', len(in_train))
+    print('len in_test', len(in_test))
+    print('len in_none', len(in_none))
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
