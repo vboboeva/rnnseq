@@ -208,101 +208,27 @@ if __name__ == "__main__":
     train and test network
 
     '''
-    train_losses = []
-    test_losses = []
-    train_accuracies = []
-    test_accuracies = []
+
     n_batches = len(train_ids)//batch_size
     optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0)
 
-    X_train = x[:,train_ids,:]
-    X_test = x[:,test_ids,:]
-
-    # for _ in range(n_epochs):
-    for _ in tqdm(range(n_epochs)):
-        '''
-        Calculate test error and accuracy
-        '''
-        with torch.no_grad():
-            X_test = X_test.to(model.device)
-            ht, hT, y_test = model(X_test)
-            y_test = y_test.to(model.device)
-            if whichloss == 'CE':
-                loss = F.cross_entropy(y_test[:-1].permute(1,2,0), X_test[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
-            elif whichloss == 'MSE':
-                loss = F.mse_loss(y_test[:-1], X_test[1:], reduction='mean')
-            else:
-                print('Loss function not recognized!')
-            test_losses.append(loss.item())
-            label = torch.argmax(X_test, dim=-1)
-            pred = torch.argmax(y_test, dim=-1)
-            test_accuracies.append( pred.eq(label).sum().item() / (n_test*L) )
-        '''
-        Calculate train error
-        '''
-        with torch.no_grad():
-            X_train = X_train.to(model.device)
-            ht, hT, y_train = model(X_train)
-            y_train = y_train.to(model.device)
-            
-            if whichloss == 'CE':
-                loss = F.cross_entropy(y_train[:-1].permute(1,2,0), X_train[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
-            elif whichloss == 'MSE':
-                loss = F.mse_loss(y_train[:-1], X_train[1:], reduction='mean')
-            else:
-                print('Loss function not recognized!')
-
-            train_losses.append(loss.item())
-            label = torch.argmax(X_train, dim=-1)
-            pred = torch.argmax(y_train, dim=-1)
-            train_accuracies.append( pred.eq(label).sum().item() / (n_train*L) )
-
-        '''
-        train the network to produce the next letter
-        '''
-
-        # shuffle training data so that in each epoch data is split randomly in batches for training
-
-        _ids = torch.randperm(train_ids.size(0))
-        train_ids = train_ids[_ids]
-        # np.random.shuffle(train_ids)
-
-        # we are training in batches
-        accuracy = 0
-        for batch in range(n_batches):
-            optimizer.zero_grad()
-
-            batch_start = batch * batch_size
-            batch_end = (batch + 1) * batch_size
-
-            X_batch = x[:, train_ids[batch_start:batch_end], :]
-            X_batch = X_batch.to(model.device)
-            # print(np.shape(X_batch))
-
-            ht, hT, y_batch = model(X_batch)
-            y_batch = y_batch.to(model.device)
-
-            if whichloss == 'CE':
-                loss = F.cross_entropy(y_batch[:-1].permute(1,2,0), X_batch[1:].permute(1,2,0).softmax(dim=1), reduction='mean')
-            elif whichloss == 'MSE':
-                loss = F.mse_loss(y_batch[:-1], X_batch[1:], reduction='mean')
-            else:
-                print('Loss function not recognized!')
-
-            loss.backward()
-            optimizer.step()
+    train_losses, test_losses, train_accuracies, test_accuracies = train(x, train_ids, test_ids, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size)
 
     start=4
+
+    X_train = x[:,train_ids,:]
+    X_test = x[:,test_ids,:]
 
     # X_train:  L x len(trainingdata) x alpha
 
     in_train=[]
     in_test=[]
     in_none=[]
+
     for i in range(len(X_train[0,:])):
         se= tokens_train[i]
         seq = [se[j] for j in range(len(se))]
-        pred_seq = predict(letter_to_index, index_to_letter, seq[:start], L-start)
+        pred_seq = predict(alpha, model, letter_to_index, index_to_letter, seq[:start], L-start)
         if (tokens_train == pred_seq).all(axis=1).any():
             print('in train', pred_seq)
             in_train += [pred_seq]
