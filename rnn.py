@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 from pprint import pprint
 from tqdm import tqdm
 import string
+from train import train
+from train import predict
 
 
 class RNN(nn.Module):
@@ -67,53 +69,6 @@ class RNN(nn.Module):
         return ht, hT, y
 
 
-def predict(letter_to_index, index_to_letter, seq_start, next_letters):
-    # model.eval()
-
-    # print('seqstart', seq_start)
-    with torch.no_grad():
-
-    # starts with a sequence of words of given length, initializes network
-
-        # goes through each of the seq_start we want to predict
-        for i in range(0, next_letters):
-            x = torch.zeros((len(seq_start), alpha), dtype=torch.float32)
-            pos = [letter_to_index[w] for w in seq_start[i:]]
-            # print('pos',pos)
-            for k, p in enumerate(pos):
-                # print(k)
-                x[k,:]= F.one_hot(torch.tensor(p), alpha)
-            # print('heree', x)
-            # y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
-
-            # x has to have dimensions (L, sizetrain, alpha)
-
-            a, b, y_pred = model(x)#.permute(1,0,2)
-            # print('y_pred shape', np.shape(y_pred))
-            # print('y_pred', y_pred)
-            
-
-            # last_letter_logits has dimension alpha
-            last_letter_logits = y_pred[-1,:]
-            # print('logit', last_letter_logits)
-            # print('shape logit', np.shape(last_letter_logits))
-
-            # applies a softmax to transform activations into a proba, has dimensions alpha
-            proba = torch.nn.functional.softmax(last_letter_logits, dim=0).detach().numpy()
-            # print('proba tensor', proba)
-            # print('sum=', np.sum(proba))
-
-            # then samples randomly from that proba distribution 
-            letter_index = np.random.choice(len(last_letter_logits), p=proba)
-
-            # print(letter_index)
-
-            # appends it into the sequence produced
-            seq_start.append(index_to_letter[letter_index])
-
-    # print(seq_start)
-    return seq_start
-
 if __name__ == "__main__":
 
     # sequence parameters 
@@ -125,7 +80,7 @@ if __name__ == "__main__":
     n_hidden = 100
     n_layers = 1
 
-    n_epochs = 400
+    n_epochs = 5
     batch_size = 10
 
     # fraction of data used to train
