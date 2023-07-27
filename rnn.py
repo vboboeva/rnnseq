@@ -63,8 +63,7 @@ class RNN(nn.Module):
 
         # whole sequence of hidden states, linearly transformed
         y = self.fc(ht)
-        # exit()
-        # y = F.softmax(self.fc(ht), dim=2)
+        y = F.softmax(self.fc(ht), dim=-1)
 
         return ht, hT, y
 
@@ -80,14 +79,19 @@ if __name__ == "__main__":
     n_hidden = 100
     n_layers = 1
 
-    n_epochs = 5
+    n_epochs = 300
     batch_size = 10
 
     # fraction of data used to train
-    frac_train=.95
+    frac_train=.5
 
     # load the number of inputs
     alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
+
+    print(alpha)
+
+    # number of initial letters to cue net with
+    start=4
 
     # make a dictionary
     letter_to_index = {}
@@ -115,7 +119,8 @@ if __name__ == "__main__":
 
     all_tokens=[]
     # load all the tokens corresponding to that type
-    for t, type_ in enumerate(types[:2]):
+    for t, type_ in enumerate(types[:1]):
+        print('type_', type_)
         tokens = loadtxt('input/%s.txt'%type_, dtype='str')
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
@@ -167,35 +172,13 @@ if __name__ == "__main__":
     n_batches = len(train_ids)//batch_size
     optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0)
 
-    train_losses, test_losses, train_accuracies, test_accuracies = train(x, train_ids, test_ids, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size)
+    ###################################################
+    
+    train_losses, test_losses, train_accuracies, test_accuracies = train(x, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
 
-    start=4
-
-    X_train = x[:,train_ids,:]
-    X_test = x[:,test_ids,:]
-
+    ###################################################
     # X_train:  L x len(trainingdata) x alpha
 
-    in_train=[]
-    in_test=[]
-    in_none=[]
-
-    for i in range(len(X_train[0,:])):
-        se= tokens_train[i]
-        seq = [se[j] for j in range(len(se))]
-        pred_seq = predict(alpha, model, letter_to_index, index_to_letter, seq[:start], L-start)
-        if (tokens_train == pred_seq).all(axis=1).any():
-            print('in train', pred_seq)
-            in_train += [pred_seq]
-        elif (tokens_test == pred_seq).all(axis=1).any():
-            print('in test', pred_seq)
-            in_test += [pred_seq]
-        else:
-            print('in none', pred_seq)
-            in_none +=[pred_seq]
-    print('len in_train', len(in_train))
-    print('len in_test', len(in_test))
-    print('len in_none', len(in_none))
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
