@@ -11,7 +11,10 @@ import string
 
 
 
-def train(x, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start):
+def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start):
+
+	print('shape X_train', np.shape(X_train))
+	print('shape train_ids', np.shape(train_ids))
 
 	if whichloss == 'CE':
 	    loss_function = \
@@ -24,9 +27,6 @@ def train(x, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, w
 	    			reduction="mean")
 	else:
 	    print('Loss function not recognized!')
-
-	X_train = x[:,train_ids,:]
-	X_test = x[:,test_ids,:]
 
 	train_losses = []
 	test_losses = []
@@ -68,6 +68,7 @@ def train(x, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, w
 	        loss = loss_function(y_test[:-1], X_test[1:])
 	        test_losses.append(loss.item())
 
+	        # OLD WAY OF COMPUTING ACCURACY
 	        # label = torch.argmax(X_test, dim=-1)
 	        # pred = torch.argmax(y_test, dim=-1)
 	        # test_accuracies.append( pred.eq(label).sum().item() / (n_test*L) )
@@ -92,7 +93,7 @@ def train(x, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, w
 	        batch_start = batch * batch_size
 	        batch_end = (batch + 1) * batch_size
 
-	        X_batch = x[:, train_ids[batch_start:batch_end], :]
+	        X_batch = X_train[:, train_ids[batch_start:batch_end], :]
 	        X_batch = X_batch.to(model.device)
 	        # print(np.shape(X_batch))
 
@@ -136,15 +137,19 @@ def compute_accuracies(X, whichset, whichloss, tokens_train, tokens_test, accura
 		
 		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, seq[:start], L-start)
 
+
 		if (tokens_train == pred_seq).all(axis=1).any():
 		    # print('in train', pred_seq)
-		    in_train += [pred_seq]
+			in_train += [pred_seq]
+			# print(whichset, seq,  10*'-', pred_seq, 'in train')
 		elif (tokens_test == pred_seq).all(axis=1).any():
 		    # print('in test', pred_seq)
 		    in_test += [pred_seq]
+		    # print(whichset, seq, 10*'-', pred_seq, 'in test')
 		else:
 		    # print('in none', pred_seq)
 			in_none += [pred_seq]
+			# print(whichset, seq, 10*'-', pred_seq, 'in none')
 
 	if whichset == 'train':
 		accuracies.append( len(in_train)/len(X[0,:]) )
@@ -163,10 +168,10 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
 
         # goes through each of the seq_start we want to predict
         for i in range(0, next_letters):
-            x = torch.zeros((len(seq_start), alpha), dtype=torch.float32)
+            x = torch.zeros((len(seq_start), alpha), dtype=torch.float32).to(model.device)
             pos = [letter_to_index[w] for w in seq_start[i:]]
             for k, p in enumerate(pos):
-                x[k,:]= F.one_hot(torch.tensor(p), alpha)
+                x[k,:] = F.one_hot(torch.tensor(p), alpha)
             # y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
             # x has to have dimensions (L, sizetrain, alpha)
 
@@ -175,7 +180,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
             # last_letter_logits has dimension alpha
             last_letter_logits = y_pred[-1,:]
             # applies a softmax to transform activations into a proba, has dimensions alpha
-            proba = torch.nn.functional.softmax(last_letter_logits, dim=0).detach().numpy()
+            proba = torch.nn.functional.softmax(last_letter_logits, dim=0).detach().cpu().numpy()
             # then samples randomly from that proba distribution 
             letter_index = np.random.choice(len(last_letter_logits), p=proba)
 
