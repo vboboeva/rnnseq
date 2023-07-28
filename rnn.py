@@ -16,56 +16,7 @@ from tqdm import tqdm
 import string
 from train import train
 from train import predict
-
-
-class RNN(nn.Module):
-    def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, \
-            nonlinearity="tanh", device="cpu"):
-        super(RNN, self).__init__()
-
-        # Defining the number of layers and the nodes in each layer
-        self.hidden_num_units = hidden_num_units
-        self.num_layers = num_layers
-
-        # RNN layers
-        self.rnn = nn.RNN(input_num_units, hidden_num_units, num_layers, nonlinearity=nonlinearity)
-
-        # Fully connected layer
-        self.fc = nn.Linear(hidden_num_units, output_num_units)
-
-        self.device = device
-        self.to(self.device)
-
-
-    def forward(self, x):
-        '''
-        x
-        ---
-        seq_length, batch_size, input_num_units
-        or
-        seq_length, input_num_units
-        '''
-
-        '''
-        h0 -- initial network state
-        ---
-        num_layers, batch_size, hidden_num_units
-        or
-        num_layers, hidden_num_units
-        '''
-        h0 = torch.randn(self.num_layers, x.shape[1], self.hidden_num_units).to(self.device)
-
-        # ht = sequence of hidden states
-        # hT = last hidden state
-        # ht, hT = self.rnn(x, h0)
-        # print('x',np.shape(x))
-        ht, hT = self.rnn(x)
-
-        # whole sequence of hidden states, linearly transformed
-        y = self.fc(ht)
-        y = F.softmax(self.fc(ht), dim=-1)
-
-        return ht, hT, y
+from model import RNN
 
 
 if __name__ == "__main__":
@@ -73,17 +24,18 @@ if __name__ == "__main__":
     # sequence parameters 
     L=5
     m=2
-    whichloss='CE'
 
     # network parameters
     n_hidden = 100
     n_layers = 1
 
-    n_epochs = 300
-    batch_size = 10
+    # training
 
-    # fraction of data used to train
-    frac_train=.5
+    whichloss='CE'
+    n_epochs = 200
+    batch_size = 5
+    learning_rate = 0.001
+    frac_train=.8
 
     # load the number of inputs
     alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
@@ -170,7 +122,7 @@ if __name__ == "__main__":
     '''
 
     n_batches = len(train_ids)//batch_size
-    optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=0)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
     ###################################################
     
