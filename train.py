@@ -169,7 +169,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
             # last_letter_logits has dimension alpha
             last_letter_logits = y_pred[-1,:]
             # applies a softmax to transform activations into a proba, has dimensions alpha
-            proba = torch.nn.functional.softmax(last_letter_logits, dim=0).detach().cpu().numpy()
+            proba = temperature_scaled_softmax(last_letter_logits, temperature=0.001).detach().cpu().numpy()
             # then samples randomly from that proba distribution 
             letter_index = np.random.choice(len(last_letter_logits), p=proba)
 
@@ -177,3 +177,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
             seq_start.append(index_to_letter[letter_index])
 
     return seq_start
+
+def temperature_scaled_softmax(logits, temperature=1.0):
+    logits = logits / temperature
+    return torch.softmax(logits, dim=0)
