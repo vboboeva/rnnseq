@@ -11,10 +11,10 @@ import string
 
 
 
-def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start):
+def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start):
 
-	print('shape X_train', np.shape(X_train))
-	print('shape train_ids', np.shape(train_ids))
+	# print('shape X_train', np.shape(X_train))
+	# print('shape train_ids', np.shape(train_ids))
 
 	if whichloss == 'CE':
 	    loss_function = \
@@ -33,8 +33,8 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 	train_accuracies = []
 	test_accuracies = []
 
-	n_train = len(train_ids)
-	n_test = len(test_ids)
+	n_train = X_train.shape[1] #len(train_ids)
+	n_test = X_test.shape[1] #len(test_ids)
 
 	# for _ in range(n_epochs):
 	for _ in tqdm(range(n_epochs)):
@@ -55,7 +55,7 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 	        # pred = torch.argmax(y_train, dim=-1)
 	        # train_accuracies.append( pred.eq(label).sum().item() / (n_train*L) )
 
-	        compute_accuracies(X_train, 'train', whichloss, tokens_train, tokens_test, train_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
+	        compute_accuracies(X_train, 'train', tokens_train, tokens_test, train_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
 
 	    '''
 	    Calculate test error and accuracy
@@ -73,7 +73,7 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 	        # pred = torch.argmax(y_test, dim=-1)
 	        # test_accuracies.append( pred.eq(label).sum().item() / (n_test*L) )
 
-	        compute_accuracies(X_test, 'test', whichloss, tokens_train, tokens_test, test_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
+	        compute_accuracies(X_test, 'test', tokens_train, tokens_test, test_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
 
 	    '''
 	    train the network to produce the next letter
@@ -81,8 +81,7 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 
 	    # shuffle training data so that in each epoch data is split randomly in batches for training
 
-	    _ids = torch.randperm(train_ids.size(0))
-	    train_ids = train_ids[_ids]
+	    _ids = torch.randperm(n_train)
 	    # np.random.shuffle(train_ids)
 
 	    # we are training in batches
@@ -93,7 +92,7 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 	        batch_start = batch * batch_size
 	        batch_end = (batch + 1) * batch_size
 
-	        X_batch = X_train[:, train_ids[batch_start:batch_end], :]
+	        X_batch = X_train[:, _ids[batch_start:batch_end], :]
 	        X_batch = X_batch.to(model.device)
 	        # print(np.shape(X_batch))
 
@@ -106,21 +105,7 @@ def train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model
 
 	return train_losses, test_losses, train_accuracies, test_accuracies
 
-def compute_accuracies(X, whichset, whichloss, tokens_train, tokens_test, accuracies, alpha, model, letter_to_index, index_to_letter, L, start):
-
-	# print('which', whichset)
-
-	if whichloss == 'CE':
-	    loss_function = \
-	    	lambda output, target: F.cross_entropy(
-	    			output.permute(1,2,0), 
-	    			target.permute(1,2,0), reduction="mean")
-	elif whichloss == 'MSE':
-	    loss_function = \
-	    	lambda output, target: F.mse_loss(output, target,
-	    			reduction="mean")
-	else:
-	    print('Loss function not recognized!')
+def compute_accuracies(X, whichset, tokens_train, tokens_test, accuracies, alpha, model, letter_to_index, index_to_letter, L, start):
 
 	in_train=[]
 	in_test=[]
@@ -131,7 +116,11 @@ def compute_accuracies(X, whichset, whichloss, tokens_train, tokens_test, accura
 	elif whichset == 'test':
 		tokens=tokens_test
 
-	for i in range(len(X[0,:])):
+	# print(len(X[0,:,0]))
+	# print(len(X[0,:]))
+	# exit()
+	# X is L by n_train by alpha
+	for i in range(len(X[0,:,0])):
 		se = tokens[i]
 		seq = [se[j] for j in range(len(se))] # convert string to list of letters
 		
@@ -152,10 +141,10 @@ def compute_accuracies(X, whichset, whichloss, tokens_train, tokens_test, accura
 			# print(whichset, seq, 10*'-', pred_seq, 'in none')
 
 	if whichset == 'train':
-		accuracies.append( len(in_train)/len(X[0,:]) )
+		accuracies.append( len(in_train)/len(X[0,:,0]) )
 		# print( len(in_train)/len(X[0,:]) )
 	elif whichset == 'test':
-		accuracies.append( len(in_test)/len(X[0,:]) )
+		accuracies.append( len(in_test)/len(X[0,:,0]) )
 		# print( len(in_test)/len(X[0,:]) )
 
 

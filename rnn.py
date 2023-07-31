@@ -76,17 +76,17 @@ if __name__ == "__main__":
     m=2
 
     # network parameters
-    n_hidden = 300
+    n_hidden = 500
     n_layers = 1
 
     # training
     whichloss='CE'
     n_epochs = 500
-    batch_size = 10
-    learning_rate = 0.0001
-    frac_train=.8
-    start=2     # number of initial letters to cue net with
-    repeats=10
+    batch_size = 50
+    learning_rate = 0.001
+    frac_train = 0.8
+    start = 2   # number of initial letters to cue net with
+    repeats = 10
 
     # load the number of inputs
     alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
@@ -120,19 +120,18 @@ if __name__ == "__main__":
 
     print('len train', np.shape(X_train))
 
-    tokens_train=all_tokens[train_ids,:]
-    tokens_test=all_tokens[test_ids,:]
+    tokens_train = all_tokens[train_ids,:]
+    tokens_test = all_tokens[test_ids,:]
 
     # repeat some training data 
     tokens_train_repeated=[]
     train_ids_repeated = []
     X_train_repeated=[]
+    j=0
     
     for i in range(len(tokens_train)):
-        id_=train_ids[i]
+
         random_number = random.randint(1, repeats)
-        # print(i, np.shape(X_train[:,i,:]), random_number)
-        
         X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis=2)).permute(0,2,1)
         
         if i == 0:
@@ -144,14 +143,18 @@ if __name__ == "__main__":
             
             X_train_repeated = np.concatenate((X_train_repeated, X_tostack), axis = 1)
         
-        train_ids_repeated = np.append(train_ids_repeated, np.arange(id_, id_+random_number,1))
+        train_ids_repeated = np.append(train_ids_repeated, np.arange(j, j +random_number, 1))
 
+        j += random_number
 
     count=count(tokens_train_repeated)
     train_ids_repeated=torch.tensor(train_ids_repeated.astype(int))
     X_train_repeated=torch.tensor(X_train_repeated)
-    
 
+
+    # print(tokens_train_repeated)
+    # print(train_ids_repeated)
+    # print(X_train_repeated)
 
     # train and test network
 
@@ -159,11 +162,10 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
     ###################################################
-    print('train_ids', train_ids)
-    print('train_ids_repeated', len(train_ids_repeated))
-    print('train_ids_repeated', np.shape(X_train_repeated))
     
-    train_losses, test_losses, train_accuracies, test_accuracies = train(X_train_repeated, X_test, train_ids_repeated, test_ids, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
+    # train_losses, test_losses, train_accuracies, test_accuracies = train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
+   
+    train_losses, test_losses, train_accuracies, test_accuracies = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
 
     ###################################################
     # X_train:  L x len(trainingdata) x alpha
