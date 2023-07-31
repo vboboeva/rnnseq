@@ -72,20 +72,20 @@ def load_tokens(types):
 if __name__ == "__main__":
 
     # sequence parameters 
-    L=3
+    L=4
     m=2
 
     # network parameters
-    n_hidden = 500
+    n_hidden = 100
     n_layers = 1
 
     # training
     whichloss='CE'
     n_epochs = 500
-    batch_size = 50
+    batch_size = 20
     learning_rate = 0.001
     frac_train = 0.8
-    start = 2   # number of initial letters to cue net with
+    start = 3   # number of initial letters to cue net with
     repeats = 10
 
     # load the number of inputs
@@ -110,6 +110,7 @@ if __name__ == "__main__":
     n_train = int(frac_train*len(all_tokens))
     n_test = len(all_tokens) - n_train
 
+    print('n_train', n_train)
 
     # torch.manual_seed(0)
     ids = torch.randperm(len(all_tokens))
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     X_train = x[:,train_ids,:]
     X_test = x[:,test_ids,:]
 
-    print('len train', np.shape(X_train))
+    print('len train before repeats', np.shape(X_train))
 
     tokens_train = all_tokens[train_ids,:]
     tokens_test = all_tokens[test_ids,:]
@@ -151,14 +152,17 @@ if __name__ == "__main__":
     train_ids_repeated=torch.tensor(train_ids_repeated.astype(int))
     X_train_repeated=torch.tensor(X_train_repeated)
 
+    print('len train after repeats', np.shape(X_train_repeated))
 
-    # print(tokens_train_repeated)
-    # print(train_ids_repeated)
-    # print(X_train_repeated)
+    # make sure batch size is not larger than total amount of data
+
+    if len(tokens_train_repeated) <= batch_size:
+        batch_size = len(tokens_train_repeated)    
+
+    n_batches = len(tokens_train_repeated)//batch_size
 
     # train and test network
 
-    n_batches = len(train_ids)//batch_size
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
     ###################################################
