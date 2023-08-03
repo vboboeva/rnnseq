@@ -65,3 +65,16 @@ class RNN(nn.Module):
         y = F.softmax(self.fc(ht), dim=-1)
 
         return ht, hT, y
+
+
+    def get_activity(self, x):
+
+        with torch.no_grad():
+
+            _x = x.clone().detach().to(self.device)
+
+            ht, _, _ = self.forward(_x)
+
+            y = ht.permute(1,0,2)
+
+        return y

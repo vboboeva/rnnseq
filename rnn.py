@@ -19,6 +19,9 @@ import sys
 from train import train
 from train import predict
 from model import RNN
+from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
+from plot_utils import plot_fps_subspace
+
 
 # count how many transitions of each kind we have
 def count(M):    
@@ -69,6 +72,63 @@ def load_tokens(types, n_types):
     return x, all_tokens
 
 
+def find_plot_fixed_points(model, valid_predictions):
+    ''' Find, analyze, and visualize the fixed points of the trained RNN.
+
+    Args:
+        model: FlipFlop object.
+
+            Trained RNN model, as returned by train_FlipFlop().
+
+        valid_predictions: dict.
+
+            Model predictions on validation trials, as returned by
+            train_FlipFlop().
+
+    Returns:
+        None.
+    '''
+
+    NOISE_SCALE = 0.2 # Standard deviation of noise added to initial states
+    N_INITS =  20000 # 1024 The number of initial states to provide
+
+    n_bits = alpha
+
+    '''Fixed point finder hyperparameters. See FixedPointFinder.py for detailed
+    descriptions of available hyperparameters.'''
+    fpf_hps = {
+        'max_iters': 1000,
+        'lr_init': 1.,
+        'outlier_distance_scale': 10.0,
+        'verbose': True, 
+        'super_verbose': True}
+
+    # Setup the fixed point finder
+    fpf = FixedPointFinder(model.rnn, **fpf_hps)
+
+    '''Draw random, noise corrupted samples of those state trajectories
+    to use as initial states for the fixed point optimizations.'''
+    initial_states = fpf.sample_states(valid_predictions,
+        n_inits=N_INITS,
+        noise_scale=NOISE_SCALE)
+
+    # Study the system in the absence of input pulses (e.g., all inputs are 0)
+    inputs = np.zeros([1, n_bits])
+
+    # Run the fixed point finder
+    unique_fps, all_fps = fpf.find_fixed_points(initial_states, inputs)
+
+
+    # Visualize identified fixed points with overlaid RNN state trajectories
+    # All visualized in the 3D PCA space fit the the example RNN states.
+    fig = plot_fps_subspace(unique_fps, valid_predictions,
+        plot_batch_idx=list(range(30)),
+        plot_start_time=10)
+    plt.tight_layout()
+    fig.savefig('test.jpg')
+
+    return(unique_fps)
+
 if __name__ == "__main__":
 
     # sequence parameters 
@@ -76,20 +136,22 @@ if __name__ == "__main__":
     m=2
 
     # network parameters
-    n_hidden = 100
+    n_hidden = 20
     n_layers = 1
 
     # training
     
     whichloss='CE'
-    n_simulations = 10
-    n_epochs = 300
-    batch_size = 20
+    n_simulations = 1
+    n_epochs = 400
+    batch_size = 10
     learning_rate = 0.001
-    frac_train = 0.8 # fraction of data to train net with
+    frac_train = 0.9 # fraction of data to train net with
     start = L-1   # number of initial letters to cue net with
     n_repeats = 1 # max number of repeats of a given sequence
-    n_types = -1 # number of types to train net with: 1 takes just the first, -1 takes all
+    n_types = 2 # number of types to train net with: 1 takes just the first, -1 takes all
+
+    # torch.manual_seed(0)
 
     # load the number of inputs
     alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
@@ -126,7 +188,7 @@ if __name__ == "__main__":
 
         print('SIMULATION NO', sim)
         # take all sequences and randomize them, split into train and test sets
-        ids = torch.randperm(len(all_tokens))
+        ids = np.arange(len(all_tokens)) #torch.randperm(len(all_tokens))
         train_ids = ids[:n_train]
         test_ids = ids[n_train:]
         X_train = x[:,train_ids,:]
@@ -170,13 +232,13 @@ if __name__ == "__main__":
         ###################################################
         # train and test network
         
-        # train_losses, test_losses, train_accuracies, test_accuracies = train(X_train, X_test, train_ids, test_ids, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
-
         # X_train is dimension L x len(trainingdata) x alpha
         train_losses[sim,:], test_losses[sim,:], train_accuracies[sim,:], test_accuracies[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
 
-        # print(train_losses[sim,:])
-
+        valid_predictions = model.get_activity(X_train)
+        fps = find_plot_fixed_points(model, valid_predictions)
+        print(fps)
+    
     ###################################################
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
