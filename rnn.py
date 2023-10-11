@@ -21,7 +21,9 @@ from train import predict
 from model import RNN
 from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
 from plot_utils import plot_fps_subspace
-
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import seaborn as sns
 
 # count how many transitions of each kind we have
 def count(M):    
@@ -71,6 +73,16 @@ def load_tokens(types, n_types):
 
     return x, all_tokens
 
+def z_score(X):
+    # X: ndarray, shape (n_features, n_samples)
+    ss = StandardScaler(with_mean=True, with_std=True)
+    Xz = ss.fit_transform(X.T).T
+    print(Xz)
+    return Xz
+
+###################################################################################
+# find fixed points (adapted from https://github.com/mattgolub/fixed-point-finder #
+###################################################################################
 
 def find_plot_fixed_points(model, valid_predictions):
     ''' Find, analyze, and visualize the fixed points of the trained RNN.
@@ -129,6 +141,66 @@ def find_plot_fixed_points(model, valid_predictions):
 
     return(unique_fps)
 
+#########################################################################
+# do PCA (adapted from https://pietromarchesi.net/pca-neural-data.html) #
+#########################################################################
+
+def apply_PCA(valid_predictions, n_types, n_train):
+
+
+    # valid predictions is of size num_trials x L x N, we want to transform it to N x L x num_trials
+    # Xl = valid_predictions.reshape(len(valid_predictions),-1)
+    Xl = np.array(valid_predictions.permute(2, 1, 0)) 
+    Xl = Xl.reshape(len(Xl), -1) # to make the array of shape N x L num_trials
+
+    print('shape=', np.shape(Xl))
+
+    # We then standardize the resulting matrix Xl, and fit and apply PCA to it.
+
+    n_components=5
+    trial_unique_types=types[:n_types]
+    trial_types=np.repeat(trial_unique_types, n_train)
+    trial_size=L
+
+    Xl = z_score(Xl)
+    pca = PCA() # PCA(n_components=n_components)
+    Xl_p = pca.fit_transform(Xl.T).T
+
+    # Our projected data Xl_p is in the form of a Q×TK array (number of components by number of time points times number of trials). To plot the components, I rearrange it into a dictionary:
+
+    gt = {comp : {t_type : [] for t_type in trial_unique_types} for comp in range(n_components)}
+
+    for comp in range(n_components):
+        for i, t_type in enumerate(trial_types):
+            t = Xl_p[comp, trial_size * i: trial_size * (i + 1)]
+            gt[comp][t_type].append(t)
+
+    for comp in range(n_components):
+        for t_type in trial_unique_types:
+            gt[comp][t_type] = np.vstack(gt[comp][t_type])
+
+    # Now, accessing the dictionary as gt[component][orientation] returns an array of all trials of the selected orientation projected on the selected component. We then plot the projections of each trial on the first three components.
+
+    pal = sns.color_palette('husl', 9)
+    
+    # plt.plot(np.cumsum(pca.explained_variance_ratio_))
+    # plt.show()
+
+    fig, axes = plt.subplots(1, 5, figsize=[20, 6], sharey=True, sharex=True)
+    for comp in range(5):
+        print(comp)
+        ax = axes[comp]
+        for t, t_type in enumerate(trial_unique_types):
+            data_ = gt[comp][t_type]
+            for i in range(len(trial_types))[30:40]:
+                ax.plot(np.arange(L), data_[i], label='%s'%tokens_train_repeated[i])
+        ax.set_ylabel('PC {}'.format(comp+1))
+    axes[1].set_xlabel('Time (s)')
+    ax.legend()
+    # fig.tight_layout()
+    fig.savefig('PCA.jpg')
+
+
 if __name__ == "__main__":
 
     # sequence parameters 
@@ -136,20 +208,20 @@ if __name__ == "__main__":
     m=2
 
     # network parameters
-    n_hidden = 20
+    n_hidden = 40
     n_layers = 1
 
     # training
     
     whichloss='CE'
     n_simulations = 1
-    n_epochs = 400
+    n_epochs = 50
     batch_size = 10
     learning_rate = 0.001
     frac_train = 0.9 # fraction of data to train net with
     start = L-1   # number of initial letters to cue net with
     n_repeats = 1 # max number of repeats of a given sequence
-    n_types = 2 # number of types to train net with: 1 takes just the first, -1 takes all
+    n_types = 1 # number of types to train net with: 1 takes just the first, -1 takes all
 
     # torch.manual_seed(0)
 
@@ -194,15 +266,13 @@ if __name__ == "__main__":
         X_train = x[:,train_ids,:]
         X_test = x[:,test_ids,:]
 
-        print('len train before repeats', np.shape(X_train))
-
         tokens_train = all_tokens[train_ids,:]
         tokens_test = all_tokens[test_ids,:]
 
         # take only training sequences and repeat some of them 
         tokens_train_repeated=[]
         X_train_repeated=[]
-    
+
         for i in range(len(tokens_train)):
 
             random_number=random.randint(1, n_repeats)
@@ -220,8 +290,6 @@ if __name__ == "__main__":
         # count=count(tokens_train_repeated)
         X_train_repeated=torch.tensor(X_train_repeated)
 
-        print('len train after repeats', np.shape(X_train_repeated))
-
         # make sure batch size is not larger than total amount of data
 
         if len(tokens_train_repeated) <= batch_size:
@@ -229,16 +297,21 @@ if __name__ == "__main__":
 
         n_batches = len(tokens_train_repeated)//batch_size
 
-        ###################################################
-        # train and test network
+        ##########################
+        # train and test network #
+        ##########################
         
         # X_train is dimension L x len(trainingdata) x alpha
         train_losses[sim,:], test_losses[sim,:], train_accuracies[sim,:], test_accuracies[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
 
+        # find fixed points
         valid_predictions = model.get_activity(X_train)
-        fps = find_plot_fixed_points(model, valid_predictions)
-        print(fps)
-    
+        # fps = find_plot_fixed_points(model, valid_predictions)
+        # print(fps)
+
+        apply_PCA(valid_predictions, n_types, n_train)
+
+
     ###################################################
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
@@ -252,4 +325,3 @@ if __name__ == "__main__":
     
     # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), Wio)
     # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), count)
-
