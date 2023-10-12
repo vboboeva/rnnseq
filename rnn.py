@@ -24,6 +24,9 @@ from plot_utils import plot_fps_subspace
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import seaborn as sns
+import scipy
+import scipy.cluster.hierarchy as sch
+
 
 # count how many transitions of each kind we have
 def count(M):    
@@ -145,7 +148,7 @@ def find_plot_fixed_points(model, valid_predictions):
 # do PCA (adapted from https://pietromarchesi.net/pca-neural-data.html) #
 #########################################################################
 
-def apply_PCA(valid_predictions, n_types, n_train):
+def apply_PCA():
 
 
     # valid predictions is of size num_trials x L x N, we want to transform it to N x L x num_trials
@@ -200,6 +203,66 @@ def apply_PCA(valid_predictions, n_types, n_train):
     # fig.tight_layout()
     fig.savefig('PCA.jpg')
 
+def cluster_correlation_matrix(which_clustering):
+
+    overlap_tokens=np.ndarray((n_train, n_train))
+
+    fig, ax = plt.subplots(1, L, figsize=[30, 10])
+
+    maxval=0
+    minval=0
+
+    for index_timestep in range(L):
+        for index_token1 in range(n_train):
+            for index_token2 in range(n_train):
+                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(valid_predictions[index_token1,index_timestep,:], valid_predictions[index_token2,index_timestep,:]))/n_hidden
+
+        if np.max(overlap_tokens) > maxval:
+            maxval = np.max(overlap_tokens)
+        if np.min(overlap_tokens) <= minval:
+            minval = np.min(overlap_tokens)
+
+    for index_timestep in range(L):
+        for index_token1 in range(n_train):
+            for index_token2 in range(n_train):
+                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(valid_predictions[index_token1,index_timestep,:], valid_predictions[index_token2,index_timestep,:]))/n_hidden
+
+        if which_clustering == 'timestep':
+
+            idx=np.argsort(tokens_train_repeated[:,index_timestep])
+            overlap_tokens_sorted=overlap_tokens[idx,:][:,idx]
+            tokens_train_repeated_sorted=tokens_train_repeated[idx]
+            ticklabels=["".join(i) for i in tokens_train_repeated_sorted.astype(str)]
+
+        elif which_clustering == 'distance':
+
+            pairwise_distances = sch.distance.pdist(overlap_tokens)
+            linkage = sch.linkage(pairwise_distances, method='complete')
+            cluster_distance_threshold = pairwise_distances.max()/2
+            idx_to_cluster_array = sch.fcluster(linkage, cluster_distance_threshold, 
+                                                criterion='distance')
+            idx = np.argsort(idx_to_cluster_array)
+
+        tokens_train_repeated_sorted = tokens_train_repeated[idx]
+
+        ticklabels=["".join(i) for i in tokens_train_repeated_sorted.astype(str)]
+
+        overlap_tokens_sorted=overlap_tokens[idx, :][:, idx]
+
+        im=ax[index_timestep].imshow(overlap_tokens_sorted, vmin=minval, vmax=maxval)
+
+        ax[index_timestep].set_xticks(np.arange(n_train))
+        ax[index_timestep].set_xticklabels(ticklabels, rotation=90)            
+        ax[index_timestep].set_yticks(np.arange(n_train))
+        ax[index_timestep].set_yticklabels(ticklabels)
+
+        fig.colorbar(im, ax=ax[index_timestep])
+
+    fig.savefig('Overlap_%s.jpg'%which_clustering)
+
+###########################################
+################## M A I N ################
+###########################################
 
 if __name__ == "__main__":
 
@@ -218,15 +281,16 @@ if __name__ == "__main__":
     n_epochs = 50
     batch_size = 10
     learning_rate = 0.001
-    frac_train = 0.9 # fraction of data to train net with
+    frac_train = 0.99 # fraction of data to train net with
     start = L-1   # number of initial letters to cue net with
     n_repeats = 1 # max number of repeats of a given sequence
     n_types = 1 # number of types to train net with: 1 takes just the first, -1 takes all
 
-    # torch.manual_seed(0)
+    torch.manual_seed(1987)
 
     # load the number of inputs
-    alpha = len(loadtxt('input/alphabet.txt', dtype='str'))
+    alphabet=loadtxt('input/alphabet.txt', dtype='str')
+    alpha = len(alphabet)
     print(alpha)
 
     letter_to_index, index_to_letter = make_dicts(alpha)
@@ -309,7 +373,9 @@ if __name__ == "__main__":
         # fps = find_plot_fixed_points(model, valid_predictions)
         # print(fps)
 
-        apply_PCA(valid_predictions, n_types, n_train)
+        # apply_PCA()
+
+        cluster_correlation_matrix('timestep') # either timestep or distance
 
 
     ###################################################
