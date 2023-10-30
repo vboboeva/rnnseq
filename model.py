@@ -56,14 +56,16 @@ class RNN(nn.Module):
 
         # ht = sequence of hidden states
         # hT = last hidden state
+
         # ht, hT = self.rnn(x, h0)
-        # print('x',np.shape(x))
+
         ht, hT = self.rnn(x)
+
 
         # whole sequence of hidden states, linearly transformed
         y = self.fc(ht)
         y = F.softmax(self.fc(ht), dim=-1)
-
+        
         return ht, hT, y
 
 
@@ -73,8 +75,13 @@ class RNN(nn.Module):
 
             _x = x.clone().detach().to(self.device)
 
-            ht, _, _ = self.forward(_x)
+            ht, hT, _  = self.forward(_x)
 
-            y = ht.permute(1,0,2)
+            # print('ht', np.shape(ht))
+            # print('hT', np.shape(hT))
 
-        return y
+            y = ht.permute(1,0,2) # y is of size num_trials x L x N 
+
+            W_hh = self.rnn.weight_hh_l0
+
+        return y, W_hh

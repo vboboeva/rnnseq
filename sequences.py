@@ -120,11 +120,11 @@ if __name__ == "__main__":
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 5
+    L = 3
     # Number of elements
-    whichm = 3
+    whichm = 2
     # Length of alphabet used
-    L_alph = 10
+    L_alph = 5
     alphabet = list(string.ascii_lowercase)[:L_alph]
     # print(alphabet)
     np.savetxt('input/alphabet.txt',alphabet, fmt='%s')

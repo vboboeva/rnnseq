@@ -26,6 +26,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import seaborn as sns
 import scipy
 import scipy.cluster.hierarchy as sch
+from itertools import permutations
 
 
 # count how many transitions of each kind we have
@@ -203,24 +204,32 @@ def apply_PCA():
     # fig.tight_layout()
     fig.savefig('PCA.jpg')
 
-def cluster_correlation_matrix(which_clustering):
+def cluster_correlation_matrix(which_clustering, W_hh):
 
     overlap_tokens=np.ndarray((n_train, n_train))
 
-    fig, ax = plt.subplots(1, L, figsize=[30, 10])
+    fig, ax = plt.subplots(2, L, figsize=[30, 10])
 
-    maxval=0
-    minval=0
+    maxcorrval=0
+    mincorrval=0
+
+    maxconnval=0
+    minconnval=0
 
     for index_timestep in range(L):
         for index_token1 in range(n_train):
             for index_token2 in range(n_train):
                 overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(valid_predictions[index_token1,index_timestep,:], valid_predictions[index_token2,index_timestep,:]))/n_hidden
 
-        if np.max(overlap_tokens) > maxval:
-            maxval = np.max(overlap_tokens)
-        if np.min(overlap_tokens) <= minval:
-            minval = np.min(overlap_tokens)
+        if np.max(overlap_tokens) > maxcorrval:
+            maxcorrval = np.max(overlap_tokens)
+        if np.min(overlap_tokens) <= mincorrval:
+            mincorrval = np.min(overlap_tokens)
+
+        if np.max(overlap_tokens) > maxconnval:
+            maxconnval = np.max(overlap_tokens)
+        if np.min(overlap_tokens) <= minconnval:
+            minconnval = np.min(overlap_tokens)
 
     for index_timestep in range(L):
         for index_token1 in range(n_train):
@@ -239,8 +248,7 @@ def cluster_correlation_matrix(which_clustering):
             pairwise_distances = sch.distance.pdist(overlap_tokens)
             linkage = sch.linkage(pairwise_distances, method='complete')
             cluster_distance_threshold = pairwise_distances.max()/2
-            idx_to_cluster_array = sch.fcluster(linkage, cluster_distance_threshold, 
-                                                criterion='distance')
+            idx_to_cluster_array = sch.fcluster(linkage, cluster_distance_threshold, criterion='distance')
             idx = np.argsort(idx_to_cluster_array)
 
         tokens_train_repeated_sorted = tokens_train_repeated[idx]
@@ -249,14 +257,16 @@ def cluster_correlation_matrix(which_clustering):
 
         overlap_tokens_sorted=overlap_tokens[idx, :][:, idx]
 
-        im=ax[index_timestep].imshow(overlap_tokens_sorted, vmin=minval, vmax=maxval)
+        im=ax[0,index_timestep].imshow(overlap_tokens_sorted, vmin=mincorrval, vmax=maxcorrval)
+        ax[0,index_timestep].set_xticks(np.arange(n_train))
+        ax[0,index_timestep].set_xticklabels(ticklabels, rotation=90)            
+        ax[0,index_timestep].set_yticks(np.arange(n_train))
+        ax[0,index_timestep].set_yticklabels(ticklabels)
 
-        ax[index_timestep].set_xticks(np.arange(n_train))
-        ax[index_timestep].set_xticklabels(ticklabels, rotation=90)            
-        ax[index_timestep].set_yticks(np.arange(n_train))
-        ax[index_timestep].set_yticklabels(ticklabels)
+        im1=ax[1,index_timestep].imshow(W_hh, vmin=minconnval, vmax=maxconnval)
 
-        fig.colorbar(im, ax=ax[index_timestep])
+        fig.colorbar(im, ax=ax[0, index_timestep])
+        fig.colorbar(im1, ax=ax[1, index_timestep])
 
     fig.savefig('Overlap_%s.jpg'%which_clustering)
 
@@ -267,7 +277,7 @@ def cluster_correlation_matrix(which_clustering):
 if __name__ == "__main__":
 
     # sequence parameters 
-    L=int(sys.argv[1])+2
+    L=int(sys.argv[1])+1
     m=2
 
     # network parameters
@@ -277,19 +287,17 @@ if __name__ == "__main__":
     # training
     
     whichloss='CE'
-    n_simulations = 1
-    n_epochs = 50
+    n_simulations = 20
+    n_epochs = 300
     batch_size = 10
     learning_rate = 0.001
-    frac_train = 0.99 # fraction of data to train net with
-    start = L-1   # number of initial letters to cue net with
+    frac_train = 0.9 # fraction of data to train net with
+    start = 1   # number of initial letters to cue net with
     n_repeats = 1 # max number of repeats of a given sequence
-    n_types = 1 # number of types to train net with: 1 takes just the first, -1 takes all
-
-    torch.manual_seed(1987)
+    n_types = -1 # number of types to train net with: 1 takes just the first, -1 takes all
 
     # load the number of inputs
-    alphabet=loadtxt('input/alphabet.txt', dtype='str')
+    alphabet = loadtxt('input/alphabet.txt', dtype='str')
     alpha = len(alphabet)
     print(alpha)
 
@@ -297,7 +305,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device =", device)
-
 
     # load types
     types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
@@ -309,14 +316,17 @@ if __name__ == "__main__":
     n_train = int(frac_train*len(all_tokens))
     n_test = len(all_tokens) - n_train
 
-    print('n_train', n_train)
+    # print('n_train', n_train)
 
     train_losses=np.ndarray((n_simulations, n_epochs))
     test_losses=np.ndarray((n_simulations, n_epochs))
     train_accuracies=np.ndarray((n_simulations, n_epochs))
     test_accuracies=np.ndarray((n_simulations, n_epochs))
+    seq_retrieved=np.ndarray((n_simulations, len(all_tokens)))
 
     for sim in np.arange(n_simulations):
+
+        # torch.manual_seed(1987)
 
         # input_num_units, hidden_num_units, num_layers, output_num_units
         model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
@@ -324,7 +334,7 @@ if __name__ == "__main__":
 
         print('SIMULATION NO', sim)
         # take all sequences and randomize them, split into train and test sets
-        ids = np.arange(len(all_tokens)) #torch.randperm(len(all_tokens))
+        ids = np.arange(len(all_tokens)) # torch.randperm(len(all_tokens))
         train_ids = ids[:n_train]
         test_ids = ids[n_train:]
         X_train = x[:,train_ids,:]
@@ -332,6 +342,19 @@ if __name__ == "__main__":
 
         tokens_train = all_tokens[train_ids,:]
         tokens_test = all_tokens[test_ids,:]
+
+
+        # count the number of transitions of each type
+        transition = np.zeros((alpha, alpha))
+        for token in tokens_train:
+            token = [token[j] for j in range(len(token))] # convert string to list of letters
+            for i in range(L-1):
+                xx, yy = token[i], token[i+1]
+                transition[letter_to_index[xx], letter_to_index[yy]] += 1
+
+        print(transition)
+
+        print('tokens_test', tokens_test)
 
         # take only training sequences and repeat some of them 
         tokens_train_repeated=[]
@@ -344,11 +367,11 @@ if __name__ == "__main__":
             X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis=2)).permute(0,2,1)
             
             if i == 0:
-                tokens_train_repeated = np.tile(tokens_train[i], (random_number,1))
+                tokens_train_repeated = np.tile(tokens_train[i], (random_number, 1))
                 X_train_repeated = X_tostack
 
             else:
-                tokens_train_repeated = np.vstack((tokens_train_repeated, np.tile(tokens_train[i], (random_number,1))))
+                tokens_train_repeated = np.vstack((tokens_train_repeated, np.tile(tokens_train[i], (random_number, 1))))
                 X_train_repeated = np.concatenate((X_train_repeated, X_tostack), axis = 1)
             
         # count=count(tokens_train_repeated)
@@ -366,17 +389,100 @@ if __name__ == "__main__":
         ##########################
         
         # X_train is dimension L x len(trainingdata) x alpha
-        train_losses[sim,:], test_losses[sim,:], train_accuracies[sim,:], test_accuracies[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alpha, letter_to_index, index_to_letter, start)
+        train_losses[sim,:], test_losses[sim,:], train_accuracies[sim,:], test_accuracies[sim,:], seq_retrieved[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+
+        valid_predictions, W_hh = model.get_activity(X_train)
+        
+        ##########################
+        # Connectivity           #
+        ##########################
+
+        # fig, ax = plt.subplots(1, L, figsize=[30, 10])
+
+        # valid_predictions = valid_predictions.numpy()
+
+        # for index_t in range(L):
+        #     list_indices = []
+        #     list_tokens = []     
+        #     # Wmean_hh = np.ndarray((alpha, alpha))       
+            
+        #     for i, a in enumerate(alphabet):
+                
+        #         # find the indices of the sequences corresponding to a given token
+        #         index_token = np.where(tokens_train_repeated[:, index_t] == a)[0]
+
+        #         # find the neuron indices that are active 
+        #         # take only those neurons
+        #         index_neuron = np.unique(np.where(valid_predictions[index_token, index_t, :] > 0.4)[1])
+
+        #         # append these to the big list
+        #         list_indices += list(index_neuron)
+        #         list_tokens += list(np.repeat(a, len(index_neuron)))
+
+        #         # ii, jj = np.meshgrid(index_neuron, index_neuron)
+                
+        #         # Wmean_hh[i,j] = np.mean(W_hh[index_neuron, index_neuron])
+        #         # print('mesh', ii, jj)
+
+        #     len_M = len(list_indices)
+
+        #     # make a giant empty matrix the size of the big list
+        #     M = np.ndarray((len_M, len_M))
+
+        #     for i, j in enumerate(list_indices):
+        #         for k, l in enumerate(list_indices):
+        #             M[i,k] = W_hh[j, l]
+
+        #     ax[index_t].set_xticks(np.arange(len_M))
+        #     ax[index_t].set_xticklabels(list_tokens, rotation=90)            
+        #     ax[index_t].set_yticks(np.arange(len_M))
+        #     ax[index_t].set_yticklabels(list_tokens)
+
+        #     im = ax[index_t].imshow(M)
+        #     fig.colorbar(im, ax=ax[index_t])
+
+        # fig.savefig('Connectivity.jpg')
+
+        ##########################
+        # Fixed Points           #
+        ##########################
 
         # find fixed points
-        valid_predictions = model.get_activity(X_train)
         # fps = find_plot_fixed_points(model, valid_predictions)
         # print(fps)
 
+        # do PCA on activity of hidden layer
         # apply_PCA()
 
-        cluster_correlation_matrix('timestep') # either timestep or distance
+        ###################################
+        # Dot product of the hidden layer #
+        ###################################
 
+        cluster_correlation_matrix('timestep', W_hh.detach().numpy()) # either timestep or distance  
+
+    fig, ax = plt.subplots(1, 1, figsize=[30, 10])
+    im=plt.imshow(transition, vmin=0, vmax=np.max(transition))
+    ax.set_xticks(np.arange(alpha))
+    ax.set_xticklabels(alphabet, rotation=90)
+    ax.set_yticks(np.arange(alpha))
+    ax.set_yticklabels(alphabet, rotation=90)
+    fig.colorbar(im, ax=ax)
+    fig.savefig('Transition Matrix.jpg')    
+
+    ##########################
+    # Cued Retrieval         #
+    ##########################
+
+    fig, ax = plt.subplots(1, 1, figsize=[30, 10])
+
+    ticklabels=["".join(i) for i in np.vstack((tokens_train, tokens_test)).astype(str)]
+
+    ax.bar(np.arange(len(np.mean(seq_retrieved, axis=0))), np.mean(seq_retrieved, axis=0))
+    ax.errorbar(np.arange(len(np.mean(seq_retrieved, axis=0))), np.mean(seq_retrieved, axis=0), np.std(seq_retrieved, axis=0), fmt='.')
+    ax.set_xticks(np.arange(len(np.mean(seq_retrieved, axis=0))))
+    ax.set_xticklabels(ticklabels, rotation=90)
+
+    fig.savefig('Cued Retrieval.jpg')
 
     ###################################################
 
