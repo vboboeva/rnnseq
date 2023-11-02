@@ -208,7 +208,7 @@ def cluster_correlation_matrix(which_clustering, W_hh):
 
     overlap_tokens=np.ndarray((n_train, n_train))
 
-    fig, ax = plt.subplots(2, L, figsize=[30, 10])
+    fig, ax = plt.subplots(1, L, figsize=[30, 10])
 
     maxcorrval=0
     mincorrval=0
@@ -257,18 +257,66 @@ def cluster_correlation_matrix(which_clustering, W_hh):
 
         overlap_tokens_sorted=overlap_tokens[idx, :][:, idx]
 
-        im=ax[0,index_timestep].imshow(overlap_tokens_sorted, vmin=mincorrval, vmax=maxcorrval)
-        ax[0,index_timestep].set_xticks(np.arange(n_train))
-        ax[0,index_timestep].set_xticklabels(ticklabels, rotation=90)            
-        ax[0,index_timestep].set_yticks(np.arange(n_train))
-        ax[0,index_timestep].set_yticklabels(ticklabels)
+        im=ax[index_timestep].imshow(overlap_tokens_sorted, vmin=mincorrval, vmax=maxcorrval)
+        ax[index_timestep].set_xticks(np.arange(n_train))
+        ax[index_timestep].set_xticklabels(ticklabels, rotation=90)            
+        ax[index_timestep].set_yticks(np.arange(n_train))
+        ax[index_timestep].set_yticklabels(ticklabels)
 
-        im1=ax[1,index_timestep].imshow(W_hh, vmin=minconnval, vmax=maxconnval)
+        # im1=ax[1,index_timestep].imshow(W_hh, vmin=minconnval, vmax=maxconnval)
 
-        fig.colorbar(im, ax=ax[0, index_timestep])
-        fig.colorbar(im1, ax=ax[1, index_timestep])
+        fig.colorbar(im, ax=ax[index_timestep], fraction=0.046, pad=0.04)
+        # fig.colorbar(im1, ax=ax[1, index_timestep])
 
-    fig.savefig('Overlap_%s.jpg'%which_clustering)
+    fig.savefig('Overlap_L%d_m%d_nepochs%d_ntypes%d_loss%s.png'%(L,m,n_epochs,n_types,whichloss))
+
+
+def connectivity_matrix(valid_predictions, W_hh):
+    fig, ax = plt.subplots(1, L, figsize=[30, 10])
+
+    valid_predictions = valid_predictions.numpy()
+
+    for index_t in range(L):
+        list_indices = []
+        list_tokens = []     
+        # Wmean_hh = np.ndarray((alpha, alpha))       
+        
+        for i, a in enumerate(alphabet):
+            
+            # find the indices of the sequences corresponding to a given token
+            index_token = np.where(tokens_train_repeated[:, index_t] == a)[0]
+
+            # find the neuron indices that are active 
+            # take only those neurons
+            index_neuron = np.unique(np.where(valid_predictions[index_token, index_t, :] > 0.4)[1])
+
+            # append these to the big list
+            list_indices += list(index_neuron)
+            list_tokens += list(np.repeat(a, len(index_neuron)))
+
+            # ii, jj = np.meshgrid(index_neuron, index_neuron)
+            
+            # Wmean_hh[i,j] = np.mean(W_hh[index_neuron, index_neuron])
+            # print('mesh', ii, jj)
+
+        len_M = len(list_indices)
+
+        # make a giant empty matrix the size of the big list
+        M = np.ndarray((len_M, len_M))
+
+        for i, j in enumerate(list_indices):
+            for k, l in enumerate(list_indices):
+                M[i,k] = W_hh[j, l]
+
+        ax[index_t].set_xticks(np.arange(len_M))
+        ax[index_t].set_xticklabels(list_tokens, rotation=90)            
+        ax[index_t].set_yticks(np.arange(len_M))
+        ax[index_t].set_yticklabels(list_tokens)
+
+        im = ax[index_t].imshow(M)
+        fig.colorbar(im, ax=ax[index_t], fraction=0.046, pad=0.04)
+
+    fig.savefig('Connectivity_L%d_m%d_nepochs%d_ntypes%d_loss%s.png'%(L,m,n_epochs,n_types,whichloss))    
 
 ###########################################
 ################## M A I N ################
@@ -287,8 +335,8 @@ if __name__ == "__main__":
     # training
     
     whichloss='CE'
-    n_simulations = 20
-    n_epochs = 300
+    n_simulations = 10
+    n_epochs = 100
     batch_size = 10
     learning_rate = 0.001
     frac_train = 0.9 # fraction of data to train net with
@@ -318,15 +366,18 @@ if __name__ == "__main__":
 
     # print('n_train', n_train)
 
-    train_losses=np.ndarray((n_simulations, n_epochs))
-    test_losses=np.ndarray((n_simulations, n_epochs))
-    train_accuracies=np.ndarray((n_simulations, n_epochs))
-    test_accuracies=np.ndarray((n_simulations, n_epochs))
-    seq_retrieved=np.ndarray((n_simulations, len(all_tokens)))
+    losses_train=np.ndarray((n_simulations, n_epochs))
+    losses_test=np.ndarray((n_simulations, n_epochs))
+    performances_train=np.ndarray((n_simulations, n_epochs))
+    performances_test=np.ndarray((n_simulations, n_epochs))
+    performances_other=np.ndarray((n_simulations, n_epochs))
+
+    seq_retrieved_train=np.ndarray((n_simulations, n_train))
+    seq_retrieved_test=np.ndarray((n_simulations, n_test))
 
     for sim in np.arange(n_simulations):
 
-        # torch.manual_seed(1987)
+        torch.manual_seed(1987)
 
         # input_num_units, hidden_num_units, num_layers, output_num_units
         model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
@@ -343,19 +394,6 @@ if __name__ == "__main__":
         tokens_train = all_tokens[train_ids,:]
         tokens_test = all_tokens[test_ids,:]
 
-
-        # count the number of transitions of each type
-        transition = np.zeros((alpha, alpha))
-        for token in tokens_train:
-            token = [token[j] for j in range(len(token))] # convert string to list of letters
-            for i in range(L-1):
-                xx, yy = token[i], token[i+1]
-                transition[letter_to_index[xx], letter_to_index[yy]] += 1
-
-        print(transition)
-
-        print('tokens_test', tokens_test)
-
         # take only training sequences and repeat some of them 
         tokens_train_repeated=[]
         X_train_repeated=[]
@@ -364,7 +402,7 @@ if __name__ == "__main__":
 
             random_number=random.randint(1, n_repeats)
 
-            X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis=2)).permute(0,2,1)
+            X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis = 2)).permute(0,2,1)
             
             if i == 0:
                 tokens_train_repeated = np.tile(tokens_train[i], (random_number, 1))
@@ -389,7 +427,12 @@ if __name__ == "__main__":
         ##########################
         
         # X_train is dimension L x len(trainingdata) x alpha
-        train_losses[sim,:], test_losses[sim,:], train_accuracies[sim,:], test_accuracies[sim,:], seq_retrieved[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+        losses_train[sim,:], losses_test[sim,:], performances_train[sim,:], performances_test[sim,:], performances_other[sim,:], seq_retrieved_train[sim,:], seq_retrieved_test[sim,:], seq_retrieved_other, tokens_other = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+
+        print(seq_retrieved_train)
+        print(seq_retrieved_test)
+        print(seq_retrieved_other)
+        print(tokens_other)
 
         valid_predictions, W_hh = model.get_activity(X_train)
         
@@ -397,51 +440,7 @@ if __name__ == "__main__":
         # Connectivity           #
         ##########################
 
-        # fig, ax = plt.subplots(1, L, figsize=[30, 10])
-
-        # valid_predictions = valid_predictions.numpy()
-
-        # for index_t in range(L):
-        #     list_indices = []
-        #     list_tokens = []     
-        #     # Wmean_hh = np.ndarray((alpha, alpha))       
-            
-        #     for i, a in enumerate(alphabet):
-                
-        #         # find the indices of the sequences corresponding to a given token
-        #         index_token = np.where(tokens_train_repeated[:, index_t] == a)[0]
-
-        #         # find the neuron indices that are active 
-        #         # take only those neurons
-        #         index_neuron = np.unique(np.where(valid_predictions[index_token, index_t, :] > 0.4)[1])
-
-        #         # append these to the big list
-        #         list_indices += list(index_neuron)
-        #         list_tokens += list(np.repeat(a, len(index_neuron)))
-
-        #         # ii, jj = np.meshgrid(index_neuron, index_neuron)
-                
-        #         # Wmean_hh[i,j] = np.mean(W_hh[index_neuron, index_neuron])
-        #         # print('mesh', ii, jj)
-
-        #     len_M = len(list_indices)
-
-        #     # make a giant empty matrix the size of the big list
-        #     M = np.ndarray((len_M, len_M))
-
-        #     for i, j in enumerate(list_indices):
-        #         for k, l in enumerate(list_indices):
-        #             M[i,k] = W_hh[j, l]
-
-        #     ax[index_t].set_xticks(np.arange(len_M))
-        #     ax[index_t].set_xticklabels(list_tokens, rotation=90)            
-        #     ax[index_t].set_yticks(np.arange(len_M))
-        #     ax[index_t].set_yticklabels(list_tokens)
-
-        #     im = ax[index_t].imshow(M)
-        #     fig.colorbar(im, ax=ax[index_t])
-
-        # fig.savefig('Connectivity.jpg')
+        connectivity_matrix(valid_predictions, W_hh)
 
         ##########################
         # Fixed Points           #
@@ -458,42 +457,27 @@ if __name__ == "__main__":
         # Dot product of the hidden layer #
         ###################################
 
-        cluster_correlation_matrix('timestep', W_hh.detach().numpy()) # either timestep or distance  
-
-    fig, ax = plt.subplots(1, 1, figsize=[30, 10])
-    im=plt.imshow(transition, vmin=0, vmax=np.max(transition))
-    ax.set_xticks(np.arange(alpha))
-    ax.set_xticklabels(alphabet, rotation=90)
-    ax.set_yticks(np.arange(alpha))
-    ax.set_yticklabels(alphabet, rotation=90)
-    fig.colorbar(im, ax=ax)
-    fig.savefig('Transition Matrix.jpg')    
-
-    ##########################
-    # Cued Retrieval         #
-    ##########################
-
-    fig, ax = plt.subplots(1, 1, figsize=[30, 10])
-
-    ticklabels=["".join(i) for i in np.vstack((tokens_train, tokens_test)).astype(str)]
-
-    ax.bar(np.arange(len(np.mean(seq_retrieved, axis=0))), np.mean(seq_retrieved, axis=0))
-    ax.errorbar(np.arange(len(np.mean(seq_retrieved, axis=0))), np.mean(seq_retrieved, axis=0), np.std(seq_retrieved, axis=0), fmt='.')
-    ax.set_xticks(np.arange(len(np.mean(seq_retrieved, axis=0))))
-    ax.set_xticklabels(ticklabels, rotation=90)
-
-    fig.savefig('Cued Retrieval.jpg')
+        cluster_correlation_matrix('timestep', W_hh.detach().numpy() ) # either timestep or distance  
 
     ###################################################
 
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    np.savetxt('output/loss_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), train_losses)
-    np.savetxt('output/loss_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), test_losses)
+    np.savetxt('output/tokens_train_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_train, fmt="%s")
+    np.savetxt('output/tokens_test_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_test, fmt="%s")
+    np.savetxt('output/tokens_other_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_other, fmt="%s")
 
-    np.savetxt('output/accuracy_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), train_accuracies)
-    np.savetxt('output/accuracy_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), test_accuracies)
+    np.savetxt('output/loss_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_train)
+    np.savetxt('output/loss_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_test)
+
+    np.savetxt('output/performance_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_train)
+    np.savetxt('output/performance_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_test)
+    np.savetxt('output/performance_other_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_other)
+
+    np.savetxt('output/seq_retrieved_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_train)
+    np.savetxt('output/seq_retrieved_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_test)
+    np.savetxt('output/seq_retrieved_other_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_other)
     
     # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), Wio)
     # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), count)

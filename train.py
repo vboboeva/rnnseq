@@ -8,8 +8,14 @@ import matplotlib.pyplot as plt
 from pprint import pprint
 from tqdm import tqdm
 import string
+from itertools import product
 
 
+def generate_configurations(L, alphabet):
+    return list(product(alphabet, repeat=L))
+
+def remove_subset(configurations, tokens):
+    return [config for config in configurations if config not in tokens]
 
 def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start):
 
@@ -20,6 +26,7 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 			lambda output, target: F.cross_entropy(
 					output.permute(1,2,0), 
 					target.permute(1,2,0), reduction="mean")
+			
 	elif whichloss == 'MSE':
 		loss_function = \
 			lambda output, target: F.mse_loss(output, target,
@@ -27,41 +34,44 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 	else:
 		print('Loss function not recognized!')
 
-	train_losses = []
-	test_losses = []
-	train_accuracies = []
-	test_accuracies = []
+	losses_train = []
+	losses_test = []
+	performances_train = []
+	performances_test = []
+	performances_other = []
 
 	n_train = X_train.shape[1] #len(train_ids)
 	n_test = X_test.shape[1] #len(test_ids)
 
 	for epoch in tqdm(range(n_epochs)):
-		# print(epoch)
 	
 		with torch.no_grad():
 			'''
-			Calculate train error and accuracy
+			Calculate train error and perf
 			'''
 			X_train = X_train.to(model.device)
 			ht, hT, y_train = model(X_train)
 			y_train = y_train.to(model.device)
 
 			loss = loss_function(y_train[:-1], X_train[1:])
-			train_losses.append(loss.item())
-
-			compute_accuracies(X_train, 'train', tokens_train, tokens_test, train_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
+			losses_train.append(loss.item())
 
 			'''
-			Calculate test error and accuracy
+			Calculate test error and performance
 			'''
+
 			X_test = X_test.to(model.device)
 			ht, hT, y_test = model(X_test)
 			y_test = y_test.to(model.device)
 
 			loss = loss_function(y_test[:-1], X_test[1:])
-			test_losses.append(loss.item())
+			losses_test.append(loss.item())
 
-			compute_accuracies(X_test, 'test', tokens_train, tokens_test, test_accuracies, alpha, model, letter_to_index, index_to_letter, L, start)
+			perf_train, perf_test, perf_other, predicted_list_train, predicted_list_test, predicted_list_other, tokens_other = cued_retrieval(alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L)
+
+			performances_train.append(perf_train)
+			performances_test.append(perf_test)
+			performances_other.append(perf_other)
 
 		##########################################
 		# train network to produce next letter   #
@@ -73,7 +83,6 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 		# np.random.shuffle(train_ids)
 
 		# we are training in batches
-		accuracy = 0
 		for batch in range(n_batches):
 			optimizer.zero_grad() # Resets the gradients of all optimized torch.Tensor s.
 
@@ -90,68 +99,67 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 			loss.backward()
 			optimizer.step()
 
-	# AFTER THE TRAINING
+	return losses_train, losses_test, performances_train, performances_test, performances_other, predicted_list_train, predicted_list_test, predicted_list_other, tokens_other
 
-	seq_retrieved = cued_retrieval(X_train, alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L)
-
-	return train_losses, test_losses, train_accuracies, test_accuracies, seq_retrieved
-
-def compute_accuracies(X, whichset, tokens_train, tokens_test, accuracies, alpha, model, letter_to_index, index_to_letter, L, start):
-
-	in_train=[]
-	in_test=[]
-	in_none=[]
-
-	if whichset == 'train':
-		tokens=tokens_train
-	elif whichset == 'test':
-		tokens=tokens_test
-
-	# X is L by n_train by alpha
-
-	for i in range(len(X[0,:,0])):
-		se = tokens[i]
-		seq = [se[j] for j in range(len(se))] # convert string to list of letters
-		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, seq[:start], L-start)
-
-		if (tokens_train == pred_seq).all(axis=1).any():
-			# print('in train', se, pred_seq)
-			in_train += [pred_seq]
-			# print(whichset, seq,  10*'-', pred_seq, 'in train')
-		elif (tokens_test == pred_seq).all(axis=1).any():
-			# print('in test', se, pred_seq)
-			in_test += [pred_seq]
-			# print(whichset, seq, 10*'-', pred_seq, 'in test')
-		else:
-			# print('in none', se, pred_seq)
-			in_none += [pred_seq]
-			# print(whichset, seq, 10*'-', pred_seq, 'in none')
-	
-	if whichset == 'train':
-		accuracies.append( len(in_train)/len(X[0,:,0]) )
-		# print( len(in_train)/len(X[0,:]) )
-	
-	elif whichset == 'test':
-		accuracies.append( len(in_test)/len(X[0,:,0]) )
-		# print( len(in_test)/len(X[0,:]) )
-
-
-def cued_retrieval(X, alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L):
+def cued_retrieval(alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L):
 
 	alpha=len(alphabet)
 
-	pred_seq_list = np.zeros(np.shape(np.vstack((tokens_train, tokens_test)))[0])
+	pred_seq_train = np.zeros(np.shape(tokens_train)[0])
+	pred_seq_test = np.zeros(np.shape(tokens_test)[0])
 
-	for cue_letter in np.repeat(alphabet,100):
-		
-		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue_letter], L-1)
+	cues = np.append(np.repeat(tokens_train[:,0], 20), np.repeat(tokens_test[:,0], 20))
 
-		for i, seq in enumerate(np.vstack((tokens_train, tokens_test))):
+	count=0
+	tokens_other=[]
+	pred_seq_other=[]
+
+	# cue each letter
+	for cue in cues:
+		# print(cue)
+
+		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue], L-1)
+
+		isinsets = 0
+		# check that it is in the training set
+		for i, seq in enumerate(tokens_train):
 			seq = [seq[j] for j in range(len(seq))] # convert string to list of letters
 			if pred_seq == seq:
-				pred_seq_list[i] += 1
+				# print('in train')
+				pred_seq_train[i] += 1
+				isinsets = 1
 
-	return pred_seq_list
+		# check that it is in the testing set
+		for i, seq in enumerate(tokens_test):
+			seq = [seq[j] for j in range(len(seq))] # convert string to list of letters
+			if pred_seq == seq:
+				# print('in test')
+				pred_seq_test[i] += 1
+				isinsets = 1
+		
+		if isinsets == 0:
+			# print('-------------------------------------')
+			# prin(t'pred_seq', pred_seq)
+			if count == 0:
+				tokens_other = [pred_seq]
+				pred_seq_other = [1]
+			else:
+				pred_seq = np.array(pred_seq)
+				tokens_other = np.array(tokens_other)
+				if (tokens_other == pred_seq).all(axis=1).any():
+					index=np.where((tokens_other == pred_seq).all(axis=1))[0][0]
+					pred_seq_other[index] += 1
+				else:
+					tokens_other = np.vstack((tokens_other, pred_seq))
+					pred_seq_other += [1.]
+			count+=1
+
+	perf_train=len(np.where(pred_seq_train != 0.)[0])/np.shape(tokens_train)[0]
+	perf_test=len(np.where(pred_seq_test != 0.)[0])/np.shape(tokens_test)[0]
+	perf_other=1.*len(pred_seq_other)/(alpha**L - np.shape(tokens_train)[0] - np.shape(tokens_test)[0])
+
+
+	return perf_train, perf_test, perf_other, pred_seq_train, pred_seq_test, pred_seq_other, tokens_other
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	# model.eval()
@@ -162,6 +170,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
 
 		# goes through each of the seq_start we want to predict
 		for i in range(0, next_letters):
+			
 			x = torch.zeros((len(seq_start), alpha), dtype=torch.float32).to(model.device)
 			pos = [letter_to_index[w] for w in seq_start[i:]]
 			for k, p in enumerate(pos):

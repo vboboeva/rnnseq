@@ -89,17 +89,17 @@ def findStructures(alphabet, L, whichm):
 
 
     '''
-    Obtain all different structures (up to replacement of symbols)
+    Obtain all different types (up to replacement of symbols)
     from the templates
     '''
     return_m=[]
-    structures_by_m = []
+    types_by_m = []
     for m, templates_list in enumerate(templates_by_m):
         if m+1 == whichm:
-            structures_list = []
+            types_list = []
             for template in templates_list:
                 '''
-                Find the unique structures by permuting the symbols
+                Find the unique types by permuting the symbols
                 in `template` and storing only the unique ones -- i.e.
                 those that cannot be obtained by others via in-place
                 replacement of symbols.
@@ -107,20 +107,18 @@ def findStructures(alphabet, L, whichm):
                 for perm in permutations(list(template)):
                     perm_ = "".join([s for s in perm])
                     perm_ = replace_symbols(perm_, alphabet[:whichm])
-                    if perm_ not in structures_list:
-                        structures_list.append(perm_)
-            structures_by_m.append(structures_list)
+                    if perm_ not in types_list:
+                        types_list.append(perm_)
+            types_by_m.append(types_list)
 
-    return structures_by_m
-
-
+    return types_by_m
 
 if __name__ == "__main__":
 
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 3
+    L = 5
     # Number of elements
     whichm = 2
     # Length of alphabet used
@@ -130,45 +128,32 @@ if __name__ == "__main__":
     np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
 
 
-    structures=findStructures(alphabet, L, whichm)
-    structures = [item for sublist in structures for item in sublist]
-    structures=np.array(structures)
-    np.savetxt('input/structures_L%d_m%d.txt'%(L, whichm),structures, fmt='%s')
+    types=findStructures(alphabet, L, whichm)
+    types = [item for sublist in types for item in sublist]
+    types=np.array(types)
+    np.savetxt('input/types_L%d_m%d.txt'%(L, whichm),types, fmt='%s')
 
-    unique=list(set(structures[0]))
-    # print(unique)
-    # print(40*'*')
+    unique=list(set(types[0]))
 
-    # Here we would like to make many different examples with the same underlying structure
-
+    # Here we would like to make many different examples with the same underlying type_
     # remove the letters already present in the sequences
     letters=alphabet
-    # for i in range(len(unique)):
-    #     letters.remove(unique[i])
 
     # all permutations of m letters in the alphabet
     list_permutations=list(itertools.permutations(alphabet, whichm))
 
-    # for perm in list_permutations:
-    #     print("".join(list(perm)))
-
-    # print(len(list_permutations))
-
-
-
-    # loop over the individual structures
-    for structure in structures:
+    # loop over the individual types
+    for type_ in types:
         possibilities=[]
-        print('structure =', structure)
+        print('type_ =', type_)
 
         # loop over all permutations 
         for perm in list_permutations:
             print('perm =', perm)
-            newseq=replace_symbols(structure, perm)
+            newseq=replace_symbols(type_, perm)
 
             possibilities.append(newseq)
             # print(20*'--')
-
-
-        print(structure)
-        np.savetxt('input/%s.txt'%structure, possibilities, fmt='%s')
+            
+        print(type_)
+        np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
