@@ -27,7 +27,7 @@ import seaborn as sns
 import scipy
 import scipy.cluster.hierarchy as sch
 from itertools import permutations
-
+from itertools import product
 
 # count how many transitions of each kind we have
 def count(M):    
@@ -83,6 +83,7 @@ def z_score(X):
     Xz = ss.fit_transform(X.T).T
     print(Xz)
     return Xz
+
 
 ###################################################################################
 # find fixed points (adapted from https://github.com/mattgolub/fixed-point-finder #
@@ -318,6 +319,17 @@ def connectivity_matrix(valid_predictions, W_hh):
 
     fig.savefig('Connectivity_L%d_m%d_nepochs%d_ntypes%d_loss%s.png'%(L,m,n_epochs,n_types,whichloss))    
 
+
+def generate_configurations(L, alphabet):
+    configurations = list(product(alphabet, repeat=L))
+    configurations = np.vstack([np.array(list(config)) for config in configurations])    
+    return configurations
+
+def remove_subset(configurations, subset):
+    subset_as_arrays = [np.array(item) for item in subset]
+    filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
+    return np.array(filtered)
+
 ###########################################
 ################## M A I N ################
 ###########################################
@@ -346,8 +358,8 @@ if __name__ == "__main__":
 
     # load the number of inputs
     alphabet = loadtxt('input/alphabet.txt', dtype='str')
+    alphabet = [char for char in alphabet]
     alpha = len(alphabet)
-    print(alpha)
 
     letter_to_index, index_to_letter = make_dicts(alpha)
 
@@ -363,6 +375,7 @@ if __name__ == "__main__":
 
     n_train = int(frac_train*len(all_tokens))
     n_test = len(all_tokens) - n_train
+    n_other = alpha**L - n_train - n_test
 
     # print('n_train', n_train)
 
@@ -374,6 +387,7 @@ if __name__ == "__main__":
 
     seq_retrieved_train=np.ndarray((n_simulations, n_train))
     seq_retrieved_test=np.ndarray((n_simulations, n_test))
+    seq_retrieved_other=np.ndarray((n_simulations, n_other))
 
     for sim in np.arange(n_simulations):
 
@@ -384,6 +398,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
         print('SIMULATION NO', sim)
+
         # take all sequences and randomize them, split into train and test sets
         ids = np.arange(len(all_tokens)) # torch.randperm(len(all_tokens))
         train_ids = ids[:n_train]
@@ -391,8 +406,15 @@ if __name__ == "__main__":
         X_train = x[:,train_ids,:]
         X_test = x[:,test_ids,:]
 
-        tokens_train = all_tokens[train_ids,:]
-        tokens_test = all_tokens[test_ids,:]
+        tokens_train = all_tokens[train_ids, :]
+        tokens_test = all_tokens[test_ids, :]
+
+        all_configurations = generate_configurations(L, np.array(alphabet))
+        tokens_other = remove_subset(all_configurations, all_tokens)
+
+        print(np.shape((tokens_train)))
+        print(np.shape((tokens_test)))
+        print(np.shape((tokens_other)))
 
         # take only training sequences and repeat some of them 
         tokens_train_repeated=[]
@@ -427,12 +449,11 @@ if __name__ == "__main__":
         ##########################
         
         # X_train is dimension L x len(trainingdata) x alpha
-        losses_train[sim,:], losses_test[sim,:], performances_train[sim,:], performances_test[sim,:], performances_other[sim,:], seq_retrieved_train[sim,:], seq_retrieved_test[sim,:], seq_retrieved_other, tokens_other = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+        losses_train[sim,:], losses_test[sim,:], performances_train[sim,:], performances_test[sim,:], performances_other[sim,:], seq_retrieved_train[sim,:], seq_retrieved_test[sim,:], seq_retrieved_other[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, tokens_other, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
 
-        print(seq_retrieved_train)
-        print(seq_retrieved_test)
-        print(seq_retrieved_other)
-        print(tokens_other)
+        # print(seq_retrieved_train)
+        # print(seq_retrieved_test)
+        # print(seq_retrieved_other)
 
         valid_predictions, W_hh = model.get_activity(X_train)
         
@@ -464,12 +485,13 @@ if __name__ == "__main__":
     Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
          model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    np.savetxt('output/tokens_train_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_train, fmt="%s")
-    np.savetxt('output/tokens_test_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_test, fmt="%s")
-    np.savetxt('output/tokens_other_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_other, fmt="%s")
 
     np.savetxt('output/loss_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_train)
     np.savetxt('output/loss_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_test)
+
+    np.savetxt('output/tokens_train_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_train, fmt="%s")
+    np.savetxt('output/tokens_test_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_test, fmt="%s")
+    np.savetxt('output/tokens_other_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_other, fmt="%s")
 
     np.savetxt('output/performance_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_train)
     np.savetxt('output/performance_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_test)

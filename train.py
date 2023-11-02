@@ -11,13 +11,7 @@ import string
 from itertools import product
 
 
-def generate_configurations(L, alphabet):
-    return list(product(alphabet, repeat=L))
-
-def remove_subset(configurations, tokens):
-    return [config for config in configurations if config not in tokens]
-
-def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start):
+def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start):
 
 	alpha=len(alphabet)
 
@@ -26,7 +20,7 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 			lambda output, target: F.cross_entropy(
 					output.permute(1,2,0), 
 					target.permute(1,2,0), reduction="mean")
-			
+
 	elif whichloss == 'MSE':
 		loss_function = \
 			lambda output, target: F.mse_loss(output, target,
@@ -67,7 +61,7 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 			loss = loss_function(y_test[:-1], X_test[1:])
 			losses_test.append(loss.item())
 
-			perf_train, perf_test, perf_other, predicted_list_train, predicted_list_test, predicted_list_other, tokens_other = cued_retrieval(alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L)
+			perf_train, perf_test, perf_other, predicted_list_train, predicted_list_test, predicted_list_other = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
 
 			performances_train.append(perf_train)
 			performances_test.append(perf_test)
@@ -99,67 +93,47 @@ def train(X_train, X_test, tokens_train, tokens_test, model, optimizer, whichlos
 			loss.backward()
 			optimizer.step()
 
-	return losses_train, losses_test, performances_train, performances_test, performances_other, predicted_list_train, predicted_list_test, predicted_list_other, tokens_other
+	return losses_train, losses_test, performances_train, performances_test, performances_other, predicted_list_train, predicted_list_test, predicted_list_other
 
-def cued_retrieval(alphabet, tokens_train, tokens_test, model, letter_to_index, index_to_letter, L):
+def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L):
 
 	alpha=len(alphabet)
 
 	pred_seq_train = np.zeros(np.shape(tokens_train)[0])
 	pred_seq_test = np.zeros(np.shape(tokens_test)[0])
+	pred_seq_other = np.zeros(np.shape(tokens_other)[0])
 
-	cues = np.append(np.repeat(tokens_train[:,0], 20), np.repeat(tokens_test[:,0], 20))
-
-	count=0
-	tokens_other=[]
-	pred_seq_other=[]
+	cues = np.append(np.repeat(tokens_train[:,0], 2), np.repeat(tokens_test[:,0], 2))
 
 	# cue each letter
 	for cue in cues:
-		# print(cue)
-
 		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue], L-1)
 
-		isinsets = 0
-		# check that it is in the training set
-		for i, seq in enumerate(tokens_train):
-			seq = [seq[j] for j in range(len(seq))] # convert string to list of letters
-			if pred_seq == seq:
-				# print('in train')
-				pred_seq_train[i] += 1
-				isinsets = 1
+		where=np.where((tokens_train == pred_seq).all(axis=1))
+		if where[0] != np.ndarray([]):
+			index=where[0][0]
+			pred_seq_train[index] +=1
 
-		# check that it is in the testing set
-		for i, seq in enumerate(tokens_test):
-			seq = [seq[j] for j in range(len(seq))] # convert string to list of letters
-			if pred_seq == seq:
-				# print('in test')
-				pred_seq_test[i] += 1
-				isinsets = 1
-		
-		if isinsets == 0:
-			# print('-------------------------------------')
-			# prin(t'pred_seq', pred_seq)
-			if count == 0:
-				tokens_other = [pred_seq]
-				pred_seq_other = [1]
-			else:
-				pred_seq = np.array(pred_seq)
-				tokens_other = np.array(tokens_other)
-				if (tokens_other == pred_seq).all(axis=1).any():
-					index=np.where((tokens_other == pred_seq).all(axis=1))[0][0]
-					pred_seq_other[index] += 1
-				else:
-					tokens_other = np.vstack((tokens_other, pred_seq))
-					pred_seq_other += [1.]
-			count+=1
 
+		where=np.where((tokens_test == pred_seq).all(axis=1))
+		if where[0] != np.ndarray([]):
+			index=where[0][0]
+			pred_seq_test[index] +=1
+
+		where=np.where((tokens_other == pred_seq).all(axis=1))
+		if where[0] != np.ndarray([]):
+			index=where[0][0]
+			pred_seq_other[index] +=1
+	
 	perf_train=len(np.where(pred_seq_train != 0.)[0])/np.shape(tokens_train)[0]
 	perf_test=len(np.where(pred_seq_test != 0.)[0])/np.shape(tokens_test)[0]
-	perf_other=1.*len(pred_seq_other)/(alpha**L - np.shape(tokens_train)[0] - np.shape(tokens_test)[0])
+	perf_other=len(np.where(pred_seq_other != 0.)[0])/np.shape(tokens_other)[0]
 
-
-	return perf_train, perf_test, perf_other, pred_seq_train, pred_seq_test, pred_seq_other, tokens_other
+	print(pred_seq_train)
+	print(pred_seq_test)
+	print(pred_seq_other)
+	
+	return perf_train, perf_test, perf_other, pred_seq_train, pred_seq_test, pred_seq_other
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	# model.eval()
