@@ -30,14 +30,15 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 
 	losses_train = []
 	losses_test = []
-	performances_train = []
-	performances_test = []
-	performances_other = []
+
+	retr_train = []
+	retr_test = []
+	retr_other = []
 
 	n_train = X_train.shape[1] #len(train_ids)
 	n_test = X_test.shape[1] #len(test_ids)
 
-	for epoch in tqdm(range(n_epochs)):
+	for epoch in range(n_epochs): # tqdm(range())
 	
 		with torch.no_grad():
 			'''
@@ -61,11 +62,11 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 			loss = loss_function(y_test[:-1], X_test[1:])
 			losses_test.append(loss.item())
 
-			perf_train, perf_test, perf_other, predicted_list_train, predicted_list_test, predicted_list_other = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
+			predicted_list_train, predicted_list_test, predicted_list_other = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
 
-			performances_train.append(perf_train)
-			performances_test.append(perf_test)
-			performances_other.append(perf_other)
+			retr_train.append(predicted_list_train)
+			retr_test.append(predicted_list_test)
+			retr_other.append(predicted_list_other)
 
 		##########################################
 		# train network to produce next letter   #
@@ -93,7 +94,7 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 			loss.backward()
 			optimizer.step()
 
-	return losses_train, losses_test, performances_train, performances_test, performances_other, predicted_list_train, predicted_list_test, predicted_list_other
+	return losses_train, losses_test, np.array(retr_train), np.array(retr_test), np.array(retr_other)
 
 def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L):
 
@@ -103,7 +104,7 @@ def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, let
 	pred_seq_test = np.zeros(np.shape(tokens_test)[0])
 	pred_seq_other = np.zeros(np.shape(tokens_other)[0])
 
-	cues = np.append(np.repeat(tokens_train[:,0], 2), np.repeat(tokens_test[:,0], 2))
+	cues = np.append(np.repeat(tokens_train[:,0], 1), np.repeat(tokens_test[:,0], 1))
 
 	# cue each letter
 	for cue in cues:
@@ -113,7 +114,6 @@ def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, let
 		if where[0] != np.ndarray([]):
 			index=where[0][0]
 			pred_seq_train[index] +=1
-
 
 		where=np.where((tokens_test == pred_seq).all(axis=1))
 		if where[0] != np.ndarray([]):
@@ -125,15 +125,11 @@ def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, let
 			index=where[0][0]
 			pred_seq_other[index] +=1
 	
-	perf_train=len(np.where(pred_seq_train != 0.)[0])/np.shape(tokens_train)[0]
-	perf_test=len(np.where(pred_seq_test != 0.)[0])/np.shape(tokens_test)[0]
-	perf_other=len(np.where(pred_seq_other != 0.)[0])/np.shape(tokens_other)[0]
-
-	print(pred_seq_train)
-	print(pred_seq_test)
-	print(pred_seq_other)
+	# print(pred_seq_train)
+	# print(pred_seq_test)
+	# print(pred_seq_other)
 	
-	return perf_train, perf_test, perf_other, pred_seq_train, pred_seq_test, pred_seq_other
+	return pred_seq_train, pred_seq_test, pred_seq_other
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	# model.eval()

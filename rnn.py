@@ -1,9 +1,5 @@
-'''
-
-RNN network
-
-'''
-
+import sys
+import os
 import numpy as np
 from numpy import loadtxt
 import torch
@@ -15,7 +11,6 @@ from pprint import pprint
 from tqdm import tqdm
 import string
 import random
-import sys
 from train import train
 from train import predict
 from model import RNN
@@ -23,11 +18,21 @@ from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
 from plot_utils import plot_fps_subspace
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-import seaborn as sns
 import scipy
 import scipy.cluster.hierarchy as sch
 from itertools import permutations
 from itertools import product
+from matplotlib import rc
+from pylab import rcParams
+
+# # the axes attributes need to be set before the call to subplot
+# rc('font',**{'family':'sans-serif','sans-serif':['Arial']}, size=10)
+# rc('text', usetex=True)
+# rc('axes', edgecolor='black', linewidth=0.5)
+# rc('legend', frameon=False)
+# rcParams['ytick.direction'] = 'in'
+# rcParams['xtick.direction'] = 'in'
+# rcParams['text.latex.preamble'] = r'\usepackage{sfmath}' # \boldmath
 
 # count how many transitions of each kind we have
 def count(M):    
@@ -53,14 +58,16 @@ def make_dicts(alpha):
     values = list(string.ascii_lowercase)[:alpha]
     for i, k in enumerate(keys):
         index_to_letter[k] = values[i]
-
     return letter_to_index, index_to_letter
 
-def load_tokens(types, n_types):
+def load_tokens(L, m, n_types, letter_to_index):
+    # load types
+    types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
+
     all_tokens=[]
     # load all the tokens corresponding to that type
     for t, type_ in enumerate(types[:n_types]):
-        print('type_', type_)
+        # print('type_', type_)
         tokens = loadtxt('input/%s.txt'%type_, dtype='str')
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
@@ -74,14 +81,13 @@ def load_tokens(types, n_types):
         for letter in token:
             pos = np.append(pos, letter_to_index[letter])
         x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), alpha)
-
     return x, all_tokens
 
 def z_score(X):
     # X: ndarray, shape (n_features, n_samples)
     ss = StandardScaler(with_mean=True, with_std=True)
     Xz = ss.fit_transform(X.T).T
-    print(Xz)
+    # print(Xz)
     return Xz
 
 
@@ -89,7 +95,7 @@ def z_score(X):
 # find fixed points (adapted from https://github.com/mattgolub/fixed-point-finder #
 ###################################################################################
 
-def find_plot_fixed_points(model, valid_predictions):
+def find_plot_fixed_points(model, Z):
     ''' Find, analyze, and visualize the fixed points of the trained RNN.
 
     Args:
@@ -97,7 +103,7 @@ def find_plot_fixed_points(model, valid_predictions):
 
             Trained RNN model, as returned by train_FlipFlop().
 
-        valid_predictions: dict.
+        Z: dict.
 
             Model predictions on validation trials, as returned by
             train_FlipFlop().
@@ -125,7 +131,7 @@ def find_plot_fixed_points(model, valid_predictions):
 
     '''Draw random, noise corrupted samples of those state trajectories
     to use as initial states for the fixed point optimizations.'''
-    initial_states = fpf.sample_states(valid_predictions,
+    initial_states = fpf.sample_states(Z,
         n_inits=N_INITS,
         noise_scale=NOISE_SCALE)
 
@@ -135,15 +141,13 @@ def find_plot_fixed_points(model, valid_predictions):
     # Run the fixed point finder
     unique_fps, all_fps = fpf.find_fixed_points(initial_states, inputs)
 
-
     # Visualize identified fixed points with overlaid RNN state trajectories
     # All visualized in the 3D PCA space fit the the example RNN states.
-    fig = plot_fps_subspace(unique_fps, valid_predictions,
+    fig = plot_fps_subspace(unique_fps, Z,
         plot_batch_idx=list(range(30)),
         plot_start_time=10)
     plt.tight_layout()
-    fig.savefig('test.jpg')
-
+    fig.savefig('figs/test.jpg')
     return(unique_fps)
 
 #########################################################################
@@ -152,13 +156,10 @@ def find_plot_fixed_points(model, valid_predictions):
 
 def apply_PCA():
 
-
     # valid predictions is of size num_trials x L x N, we want to transform it to N x L x num_trials
-    # Xl = valid_predictions.reshape(len(valid_predictions),-1)
-    Xl = np.array(valid_predictions.permute(2, 1, 0)) 
+    # Xl = Z.reshape(len(Z),-1)
+    Xl = np.array(Z.permute(2, 1, 0)) 
     Xl = Xl.reshape(len(Xl), -1) # to make the array of shape N x L num_trials
-
-    print('shape=', np.shape(Xl))
 
     # We then standardize the resulting matrix Xl, and fit and apply PCA to it.
 
@@ -193,7 +194,7 @@ def apply_PCA():
 
     fig, axes = plt.subplots(1, 5, figsize=[20, 6], sharey=True, sharex=True)
     for comp in range(5):
-        print(comp)
+        # print(comp)
         ax = axes[comp]
         for t, t_type in enumerate(trial_unique_types):
             data_ = gt[comp][t_type]
@@ -203,9 +204,9 @@ def apply_PCA():
     axes[1].set_xlabel('Time (s)')
     ax.legend()
     # fig.tight_layout()
-    fig.savefig('PCA.jpg')
+    fig.savefig('figs/PCA.jpg')
 
-def cluster_correlation_matrix(which_clustering, W_hh):
+def cluster_correlation_matrix(which_clustering, W_hh, Z, tokens_train_repeated, n_train, n_hidden, filename):
 
     overlap_tokens=np.ndarray((n_train, n_train))
 
@@ -220,7 +221,7 @@ def cluster_correlation_matrix(which_clustering, W_hh):
     for index_timestep in range(L):
         for index_token1 in range(n_train):
             for index_token2 in range(n_train):
-                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(valid_predictions[index_token1,index_timestep,:], valid_predictions[index_token2,index_timestep,:]))/n_hidden
+                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(Z[index_token1,index_timestep,:], Z[index_token2,index_timestep,:]))/n_hidden
 
         if np.max(overlap_tokens) > maxcorrval:
             maxcorrval = np.max(overlap_tokens)
@@ -235,7 +236,7 @@ def cluster_correlation_matrix(which_clustering, W_hh):
     for index_timestep in range(L):
         for index_token1 in range(n_train):
             for index_token2 in range(n_train):
-                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(valid_predictions[index_token1,index_timestep,:], valid_predictions[index_token2,index_timestep,:]))/n_hidden
+                overlap_tokens[index_token1, index_token2] = np.cumsum(np.dot(Z[index_token1,index_timestep,:], Z[index_token2,index_timestep,:]))/n_hidden
 
         if which_clustering == 'timestep':
 
@@ -269,13 +270,12 @@ def cluster_correlation_matrix(which_clustering, W_hh):
         fig.colorbar(im, ax=ax[index_timestep], fraction=0.046, pad=0.04)
         # fig.colorbar(im1, ax=ax[1, index_timestep])
 
-    fig.savefig('Overlap_L%d_m%d_nepochs%d_ntypes%d_loss%s.png'%(L,m,n_epochs,n_types,whichloss))
+    fig.savefig('figs/Overlap_%s.png'%(filename))
 
-
-def connectivity_matrix(valid_predictions, W_hh):
+def connectivity_matrix(Z, W_hh, tokens_train_repeated, filename):
     fig, ax = plt.subplots(1, L, figsize=[30, 10])
 
-    valid_predictions = valid_predictions.numpy()
+    Z = Z.cpu().numpy()
 
     for index_t in range(L):
         list_indices = []
@@ -289,7 +289,7 @@ def connectivity_matrix(valid_predictions, W_hh):
 
             # find the neuron indices that are active 
             # take only those neurons
-            index_neuron = np.unique(np.where(valid_predictions[index_token, index_t, :] > 0.4)[1])
+            index_neuron = np.unique(np.where(Z[index_token, index_t, :] > 0.4)[1])
 
             # append these to the big list
             list_indices += list(index_neuron)
@@ -317,8 +317,7 @@ def connectivity_matrix(valid_predictions, W_hh):
         im = ax[index_t].imshow(M)
         fig.colorbar(im, ax=ax[index_t], fraction=0.046, pad=0.04)
 
-    fig.savefig('Connectivity_L%d_m%d_nepochs%d_ntypes%d_loss%s.png'%(L,m,n_epochs,n_types,whichloss))    
-
+    fig.savefig('figs/Connectivity_%s.png'%(filename))    
 
 def generate_configurations(L, alphabet):
     configurations = list(product(alphabet, repeat=L))
@@ -330,46 +329,83 @@ def remove_subset(configurations, subset):
     filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
     return np.array(filtered)
 
+
+def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other):
+
+    np.save('%s/loss_train_sim%d'%(output_folder_name, sim), losses_train)
+    np.save('%s/loss_test_sim%d'%(output_folder_name, sim), losses_test)
+
+    # tokens are not simulation dependent, only datasplit dependent!
+    np.save('%s/tokens_train'%(output_folder_name), tokens_train)
+    np.save('%s/tokens_test'%(output_folder_name), tokens_test)
+    np.save('%s/tokens_other'%(output_folder_name), tokens_other)
+
+    np.save('%s/seq_retrieved_train_sim%d'%(output_folder_name, sim), seq_retrieved_train)
+    np.save('%s/seq_retrieved_test_sim%d'%(output_folder_name, sim), seq_retrieved_test)
+    np.save('%s/seq_retrieved_other_sim%d'%(output_folder_name, sim), seq_retrieved_other)
+
+    # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), Wio)
+    # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), count)
+
+# take only training sequences and repeat some of them 
+def make_repetitions(tokens_train, X_train, n_repeats):
+
+    tokens_train_repeated=[]
+    X_train_repeated=[]
+
+    for i in range(len(tokens_train)):
+
+        random_number=random.randint(1, n_repeats)
+
+        X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis = 2)).permute(0,2,1)
+        
+        if i == 0:
+            tokens_train_repeated = np.tile(tokens_train[i], (random_number, 1))
+            X_train_repeated = X_tostack
+
+        else:
+            tokens_train_repeated = np.vstack((tokens_train_repeated, np.tile(tokens_train[i], (random_number, 1))))
+            X_train_repeated = np.concatenate((X_train_repeated, X_tostack), axis = 1)
+
+    return tokens_train_repeated, X_train_repeated
+
+
 ###########################################
 ################## M A I N ################
 ###########################################
-
-if __name__ == "__main__":
-
-    # sequence parameters 
-    L=int(sys.argv[1])+1
-    m=2
-
+def main(
+    L, m, sim, sim_datasplit,
     # network parameters
-    n_hidden = 40
-    n_layers = 1
-
+    n_hidden = 40,
+    n_layers = 1,
     # training
-    
-    whichloss='CE'
-    n_simulations = 10
-    n_epochs = 100
-    batch_size = 10
-    learning_rate = 0.001
-    frac_train = 0.9 # fraction of data to train net with
-    start = 1   # number of initial letters to cue net with
-    n_repeats = 1 # max number of repeats of a given sequence
-    n_types = -1 # number of types to train net with: 1 takes just the first, -1 takes all
+    which_objective='CE',
+    n_epochs = 10,
+    batch_size = 10,
+    learning_rate = 0.01,
+    frac_train = 0.7, # fraction of data to train net with
+    start = 1,   # number of initial letters to cue net with
+    n_repeats = 1, # max number of repeats of a given sequence
+    n_types = -1, # number of types to train net with: 1 takes just the first, -1 takes all
+    alpha = 5, # length of alphabet
+    ):
 
-    # load the number of inputs
-    alphabet = loadtxt('input/alphabet.txt', dtype='str')
-    alphabet = [char for char in alphabet]
-    alpha = len(alphabet)
+    output_folder_name = 'L%d_m%d_nepochs%d_ntypes%d_obj%s_datasplit%s'%(L, m, n_epochs, n_types, which_objective, sim_datasplit)
+
+    # this if statement creates problems
+    # if not os.path.exists(output_folder_name):
+    #     os.makedirs(output_folder_name)
+
+    os.makedirs(output_folder_name, exist_ok=True)    
+
+    print('SIMULATION NO', sim)
 
     letter_to_index, index_to_letter = make_dicts(alpha)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print("device =", device)
+    # print("device =", device)
 
-    # load types
-    types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
-
-    x, all_tokens = load_tokens(types, n_types)
+    x, all_tokens = load_tokens(L, m, n_types, letter_to_index)
 
     # make train and test data
 
@@ -377,129 +413,137 @@ if __name__ == "__main__":
     n_test = len(all_tokens) - n_train
     n_other = alpha**L - n_train - n_test
 
-    # print('n_train', n_train)
+    torch.manual_seed(sim_datasplit)
 
-    losses_train=np.ndarray((n_simulations, n_epochs))
-    losses_test=np.ndarray((n_simulations, n_epochs))
-    performances_train=np.ndarray((n_simulations, n_epochs))
-    performances_test=np.ndarray((n_simulations, n_epochs))
-    performances_other=np.ndarray((n_simulations, n_epochs))
+    # take all sequences and randomize them, split into train and test sets
+    # ids = np.arange(len(all_tokens)) # no random splitting
+    ids = torch.randperm(len(all_tokens)) # random splitting
 
-    seq_retrieved_train=np.ndarray((n_simulations, n_train))
-    seq_retrieved_test=np.ndarray((n_simulations, n_test))
-    seq_retrieved_other=np.ndarray((n_simulations, n_other))
+    train_ids = ids[:n_train]
+    test_ids = ids[n_train:]
+    X_train = x[:,train_ids,:]
+    X_test = x[:,test_ids,:]
 
-    for sim in np.arange(n_simulations):
+    tokens_train = all_tokens[train_ids, :]
+    tokens_test = all_tokens[test_ids, :]
 
-        torch.manual_seed(1987)
+    all_configurations = generate_configurations(L, np.array(alphabet))
+    tokens_other = remove_subset(all_configurations, all_tokens)
 
-        # input_num_units, hidden_num_units, num_layers, output_num_units
-        model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
-
-        print('SIMULATION NO', sim)
-
-        # take all sequences and randomize them, split into train and test sets
-        ids = np.arange(len(all_tokens)) # torch.randperm(len(all_tokens))
-        train_ids = ids[:n_train]
-        test_ids = ids[n_train:]
-        X_train = x[:,train_ids,:]
-        X_test = x[:,test_ids,:]
-
-        tokens_train = all_tokens[train_ids, :]
-        tokens_test = all_tokens[test_ids, :]
-
-        all_configurations = generate_configurations(L, np.array(alphabet))
-        tokens_other = remove_subset(all_configurations, all_tokens)
-
-        print(np.shape((tokens_train)))
-        print(np.shape((tokens_test)))
-        print(np.shape((tokens_other)))
-
-        # take only training sequences and repeat some of them 
-        tokens_train_repeated=[]
-        X_train_repeated=[]
-
-        for i in range(len(tokens_train)):
-
-            random_number=random.randint(1, n_repeats)
-
-            X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis = 2)).permute(0,2,1)
-            
-            if i == 0:
-                tokens_train_repeated = np.tile(tokens_train[i], (random_number, 1))
-                X_train_repeated = X_tostack
-
-            else:
-                tokens_train_repeated = np.vstack((tokens_train_repeated, np.tile(tokens_train[i], (random_number, 1))))
-                X_train_repeated = np.concatenate((X_train_repeated, X_tostack), axis = 1)
-            
-        # count=count(tokens_train_repeated)
-        X_train_repeated=torch.tensor(X_train_repeated)
-
-        # make sure batch size is not larger than total amount of data
-
-        if len(tokens_train_repeated) <= batch_size:
-            batch_size = len(tokens_train_repeated)    
-
-        n_batches = len(tokens_train_repeated)//batch_size
-
-        ##########################
-        # train and test network #
-        ##########################
+    ######### if using repetitions of train data ####
+    # tokens_train_repeated, X_train_repeated = make_repetitions(tokens_train, X_train, n_repeats)
         
-        # X_train is dimension L x len(trainingdata) x alpha
-        losses_train[sim,:], losses_test[sim,:], performances_train[sim,:], performances_test[sim,:], performances_other[sim,:], seq_retrieved_train[sim,:], seq_retrieved_test[sim,:], seq_retrieved_other[sim,:] = train(X_train_repeated, X_test, tokens_train_repeated, tokens_test, tokens_other, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+    # X_train_repeated=torch.tensor(X_train_repeated)
 
-        # print(seq_retrieved_train)
-        # print(seq_retrieved_test)
-        # print(seq_retrieved_other)
+    # # make sure batch size is not larger than total amount of data
+    # if len(tokens_train_repeated) <= batch_size:
+    #     batch_size = len(tokens_train_repeated)    
 
-        valid_predictions, W_hh = model.get_activity(X_train)
-        
-        ##########################
-        # Connectivity           #
-        ##########################
+    # n_batches = len(tokens_train_repeated)//batch_size
+    ##################################################
 
-        connectivity_matrix(valid_predictions, W_hh)
+    ##########################
+    # train and test network #
+    ##########################
+    torch.manual_seed(sim)
 
-        ##########################
-        # Fixed Points           #
-        ##########################
+    n_batches = len(tokens_train)//batch_size
 
-        # find fixed points
-        # fps = find_plot_fixed_points(model, valid_predictions)
-        # print(fps)
-
-        # do PCA on activity of hidden layer
-        # apply_PCA()
-
-        ###################################
-        # Dot product of the hidden layer #
-        ###################################
-
-        cluster_correlation_matrix('timestep', W_hh.detach().numpy() ) # either timestep or distance  
-
-    ###################################################
-
-    Wio=np.dot( model.fc.state_dict()["weight"].detach().cpu().numpy(),
-         model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
-
-
-    np.savetxt('output/loss_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_train)
-    np.savetxt('output/loss_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), losses_test)
-
-    np.savetxt('output/tokens_train_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_train, fmt="%s")
-    np.savetxt('output/tokens_test_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_test, fmt="%s")
-    np.savetxt('output/tokens_other_L%d_m%d_ntypes%d.txt'%(L, m, n_types), tokens_other, fmt="%s")
-
-    np.savetxt('output/performance_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_train)
-    np.savetxt('output/performance_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_test)
-    np.savetxt('output/performance_other_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), performances_other)
-
-    np.savetxt('output/seq_retrieved_train_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_train)
-    np.savetxt('output/seq_retrieved_test_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_test)
-    np.savetxt('output/seq_retrieved_other_L%d_m%d_nepochs%d_ntypes%d_loss%s.txt'%(L, m, n_epochs, n_types, whichloss), seq_retrieved_other)
+    # input_num_units, hidden_num_units, num_layers, output_num_units
+    model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
     
-    # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), Wio)
-    # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,whichloss), count)
+    # X_train is dimension L x len(trainingdata) x alpha
+    losses_train, losses_test, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
+
+    # Z, W_hh = model.get_activity(X_train)
+    
+    ##########################
+    # Connectivity           #
+    ##########################
+
+    # connectivity_matrix(Z, W_hh, tokens_train, output_folder_name)
+
+    ##########################
+    # Fixed Points           #
+    ##########################
+
+    # find fixed points
+    # fps = find_plot_fixed_points(model, Z)
+    # print(fps)
+
+    # do PCA on activity of hidden layer
+    # apply_PCA()
+
+    ######################################################
+    # Dot product of the representations in hidden layer #
+    ######################################################
+
+    # cluster_correlation_matrix('timestep', W_hh.detach().numpy(), Z, tokens_train_repeated, n_train, n_hidden, output_folder_name ) # either timestep or distance    
+
+    # Wio=np.dot(model.fc.state_dict()["weight"].detach().cpu().numpy(),
+    #  model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
+
+    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other
+
+##################################################
+
+if __name__ == "__main__":
+
+    # run parameter
+    hpc=True
+    # load the number of inputs
+    alpha=5
+    alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
+    params=loadtxt("params.txt", dtype='int')
+
+    main_kwargs = dict(# network parameters
+        n_hidden = 40,
+        n_layers = 1,
+
+        # training
+        which_objective='CE',
+        n_epochs = 300,
+        batch_size = 10,
+        learning_rate = 0.01,
+        frac_train = 0.7, # fraction of data to train net with
+        start = 1,   # number of initial letters to cue net with
+        n_repeats = 1, # max number of repeats of a given sequence
+        n_types = -1, # number of types to train net with: 1 takes just the first, -1 takes all
+        alpha = alpha,
+    )
+
+    # sequence parameters 
+    L_col_index=0
+    m_col_index=1
+    sim_datasplit_col_index=2
+    sim_col_index=3
+
+    if hpc == True:
+        index = int(sys.argv[1])-1
+        size = 50
+        for i in range(size):
+            row_index = index * size + i
+            print(index, row_index)
+            sim = params[row_index, sim_col_index]
+            L = params[row_index, L_col_index]
+            m = params[row_index, m_col_index]
+            sim_datasplit = params[row_index, sim_datasplit_col_index]
+            
+            output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = main(L, m, sim, sim_datasplit, **main_kwargs)
+
+            savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other)
+    else:
+        n_simulations = 2
+        for i in np.arange(n_simulations):
+
+            sim = params[i, sim_col_index]
+            L = params[i, L_col_index]
+            m = params[i, m_col_index]
+            sim_datasplit = params[i, sim_datasplit_col_index]
+            
+            output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = main(L, m, sim, sim_datasplit, **main_kwargs)
+
+            savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other)
+
+
