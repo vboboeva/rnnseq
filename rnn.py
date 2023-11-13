@@ -179,8 +179,11 @@ def load_tokens(L, m, n_types, letter_to_index):
 
     all_tokens=[]
     # load all the tokens corresponding to that type
-    for t, type_ in enumerate(types[:n_types]):
-        # print('type_', type_)
+    if n_types > 0:
+        types=types[:n_types]
+
+    for t, type_ in enumerate(types):
+        print('type_', type_)
         tokens = loadtxt('input/%s.txt'%type_, dtype='str')
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
@@ -359,7 +362,7 @@ def main(
 if __name__ == "__main__":
 
     # run parameter
-    hpc=False
+    hpc=True
     # load the number of inputs
     alpha=5
     alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
@@ -392,7 +395,7 @@ if __name__ == "__main__":
         size = 50
         for i in range(size):
             row_index = index * size + i
-            print(index, row_index)
+            # print(index, row_index)
             sim = params[row_index, sim_col_index]
             L = params[row_index, L_col_index]
             m = params[row_index, m_col_index]
@@ -402,7 +405,7 @@ if __name__ == "__main__":
 
             savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh)
     else:
-        n_simulations = 2
+        n_simulations = 1
         for i in np.arange(n_simulations):
 
             sim = params[i, sim_col_index]

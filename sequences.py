@@ -118,20 +118,20 @@ if __name__ == "__main__":
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 5
+    L = 3
     # Number of elements
     whichm = 2
     # Length of alphabet used
-    L_alph = 5
-    alphabet = list(string.ascii_lowercase)[:L_alph]
+    alpha = 4
+    alphabet = list(string.ascii_lowercase)[:alpha]
     # print(alphabet)
-    np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
+    # np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
 
 
     types=findStructures(alphabet, L, whichm)
     types = [item for sublist in types for item in sublist]
     types=np.array(types)
-    np.savetxt('input/types_L%d_m%d.txt'%(L, whichm),types, fmt='%s')
+    # np.savetxt('input/types_L%d_m%d.txt'%(L, whichm),types, fmt='%s')
 
     unique=list(set(types[0]))
 
@@ -155,5 +155,6 @@ if __name__ == "__main__":
             possibilities.append(newseq)
             # print(20*'--')
             
-        print(type_)
-        np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
+        # print(type_)
+        print(possibilities)
+        # np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
