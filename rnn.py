@@ -185,6 +185,7 @@ def load_tokens(L, m, n_types, letter_to_index):
     for t, type_ in enumerate(types):
         print('type_', type_)
         tokens = loadtxt('input/%s.txt'%type_, dtype='str')
+
         tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
         all_tokens.append(tokens_arr)
     all_tokens = np.vstack(all_tokens)
@@ -197,7 +198,8 @@ def load_tokens(L, m, n_types, letter_to_index):
         for letter in token:
             pos = np.append(pos, letter_to_index[letter])
         x[:,i,:] = F.one_hot(torch.tensor(pos.astype(int)), alpha)
-    return x, all_tokens
+    
+    return x, all_tokens, np.shape(tokens)[0]
 
 def generate_configurations(L, alphabet):
     configurations = list(product(alphabet, repeat=L))
@@ -255,6 +257,7 @@ def make_repetitions(tokens_train, X_train, n_repeats):
 ###########################################
 ################## M A I N ################
 ###########################################
+
 def main(
     L, m, sim, sim_datasplit,
     # network parameters
@@ -280,6 +283,7 @@ def main(
 
     os.makedirs(output_folder_name, exist_ok=True)    
 
+    print('DATASPLIT NO', sim_datasplit)
     print('SIMULATION NO', sim)
 
     letter_to_index, index_to_letter = make_dicts(alpha)
@@ -287,7 +291,7 @@ def main(
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # print("device =", device)
 
-    x, all_tokens = load_tokens(L, m, n_types, letter_to_index)
+    x, all_tokens, num_tokens_onetype = load_tokens(L, m, n_types, letter_to_index)
 
     # make train and test data
 
@@ -296,13 +300,25 @@ def main(
     n_other = alpha**L - n_train - n_test
 
     torch.manual_seed(sim_datasplit)
+    
+    # no random splitting
+    # ids = np.arange(len(all_tokens)) 
+    
+    # take all sequences and randomize them, split into train and test sets BALANCED
 
-    # take all sequences and randomize them, split into train and test sets
-    # ids = np.arange(len(all_tokens)) # no random splitting
-    ids = torch.randperm(len(all_tokens)) # random splitting
+    train_ids = []
+    test_ids = []
+    num_types = int(np.shape(all_tokens)[0]/num_tokens_onetype)
 
-    train_ids = ids[:n_train]
-    test_ids = ids[n_train:]
+    for j in range(num_types):
+        ids = np.arange(j*num_tokens_onetype, (j+1)*num_tokens_onetype)
+        random.shuffle(ids) # random splitting
+        train_ids = np.append(train_ids, ids[:int(n_train/num_types)])
+        test_ids = np.append(test_ids, ids[int(n_train/num_types):])
+
+    train_ids = train_ids.astype(int)
+    test_ids = test_ids.astype(int)
+    
     X_train = x[:,train_ids,:]
     X_test = x[:,test_ids,:]
 
@@ -392,29 +408,18 @@ if __name__ == "__main__":
 
     if hpc == True:
         index = int(sys.argv[1])-1
-        size = 50
-        for i in range(size):
-            row_index = index * size + i
-            # print(index, row_index)
-            sim = params[row_index, sim_col_index]
-            L = params[row_index, L_col_index]
-            m = params[row_index, m_col_index]
-            sim_datasplit = params[row_index, sim_datasplit_col_index]
-            
-            output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh = main(L, m, sim, sim_datasplit, **main_kwargs)
-
-            savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh)
     else:
-        n_simulations = 1
-        for i in np.arange(n_simulations):
+        index = 1
 
-            sim = params[i, sim_col_index]
-            L = params[i, L_col_index]
-            m = params[i, m_col_index]
-            sim_datasplit = params[i, sim_datasplit_col_index]
-            
-            output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh = main(L, m, sim, sim_datasplit, **main_kwargs)
+    size = 100
+    for i in range(size):
+        row_index = index * size + i
+        # print(index, row_index)
+        sim = params[row_index, sim_col_index]
+        L = params[row_index, L_col_index]
+        m = params[row_index, m_col_index]
+        sim_datasplit = params[row_index, sim_datasplit_col_index]
+        
+        output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh = main(L, m, sim, sim_datasplit, **main_kwargs)
 
-            savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh)
-
-
+        savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh)
