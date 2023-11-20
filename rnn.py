@@ -39,12 +39,6 @@ from pylab import rcParams
 # find fixed points (adapted from https://github.com/mattgolub/fixed-point-finder #
 ###################################################################################
 
-def z_score(X):
-    # X: ndarray, shape (n_features, n_samples)
-    ss = StandardScaler(with_mean=True, with_std=True)
-    Xz = ss.fit_transform(X.T).T
-    # print(Xz)
-    return Xz
 
 def find_plot_fixed_points(model, Z):
     ''' Find, analyze, and visualize the fixed points of the trained RNN.
@@ -100,63 +94,6 @@ def find_plot_fixed_points(model, Z):
     plt.tight_layout()
     fig.savefig('figs/test.jpg')
     return(unique_fps)
-
-#########################################################################
-# do PCA (adapted from https://pietromarchesi.net/pca-neural-data.html) #
-#########################################################################
-
-def apply_PCA():
-
-    # valid predictions is of size num_trials x L x N, we want to transform it to N x L x num_trials
-    # Xl = Z.reshape(len(Z),-1)
-    Xl = np.array(Z.permute(2, 1, 0)) 
-    Xl = Xl.reshape(len(Xl), -1) # to make the array of shape N x L num_trials
-
-    # We then standardize the resulting matrix Xl, and fit and apply PCA to it.
-
-    n_components=5
-    trial_unique_types=types[:n_types]
-    trial_types=np.repeat(trial_unique_types, n_train)
-    trial_size=L
-
-    Xl = z_score(Xl)
-    pca = PCA() # PCA(n_components=n_components)
-    Xl_p = pca.fit_transform(Xl.T).T
-
-    # Our projected data Xl_p is in the form of a Q×TK array (number of components by number of time points times number of trials). To plot the components, I rearrange it into a dictionary:
-
-    gt = {comp : {t_type : [] for t_type in trial_unique_types} for comp in range(n_components)}
-
-    for comp in range(n_components):
-        for i, t_type in enumerate(trial_types):
-            t = Xl_p[comp, trial_size * i: trial_size * (i + 1)]
-            gt[comp][t_type].append(t)
-
-    for comp in range(n_components):
-        for t_type in trial_unique_types:
-            gt[comp][t_type] = np.vstack(gt[comp][t_type])
-
-    # Now, accessing the dictionary as gt[component][orientation] returns an array of all trials of the selected orientation projected on the selected component. We then plot the projections of each trial on the first three components.
-
-    pal = sns.color_palette('husl', 9)
-    
-    # plt.plot(np.cumsum(pca.explained_variance_ratio_))
-    # plt.show()
-
-    fig, axes = plt.subplots(1, 5, figsize=[20, 6], sharey=True, sharex=True)
-    for comp in range(5):
-        # print(comp)
-        ax = axes[comp]
-        for t, t_type in enumerate(trial_unique_types):
-            data_ = gt[comp][t_type]
-            for i in range(len(trial_types))[30:40]:
-                ax.plot(np.arange(L), data_[i], label='%s'%tokens_train_repeated[i])
-        ax.set_ylabel('PC {}'.format(comp+1))
-    axes[1].set_xlabel('Time (s)')
-    ax.legend()
-    # fig.tight_layout()
-    fig.savefig('figs/PCA.jpg')
-
 
 # make a dictionary
 def make_dicts(alpha):
@@ -253,7 +190,6 @@ def make_repetitions(tokens_train, X_train, n_repeats):
 
     return tokens_train_repeated, X_train_repeated
 
-
 ###########################################
 ################## M A I N ################
 ###########################################
@@ -275,7 +211,7 @@ def main(
     alpha = 5, # length of alphabet
     ):
 
-    output_folder_name = 'L%d_m%d_nepochs%d_ntypes%d_obj%s_datasplit%s'%(L, m, n_epochs, n_types, which_objective, sim_datasplit)
+    output_folder_name = 'N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_datasplit%s'%(n_hidden, L, m, n_epochs, learning_rate, n_types, which_objective, sim_datasplit)
 
     # this if statement creates problems
     # if not os.path.exists(output_folder_name):
@@ -365,9 +301,6 @@ def main(
     # fps = find_plot_fixed_points(model, Z)
     # print(fps)
 
-    # do PCA on activity of hidden layer
-    # apply_PCA()
-
     # Wio=np.dot(model.fc.state_dict()["weight"].detach().cpu().numpy(),
     #  model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
@@ -382,17 +315,18 @@ if __name__ == "__main__":
     # load the number of inputs
     alpha=5
     alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
+
     params=loadtxt("params.txt", dtype='int')
 
     main_kwargs = dict(# network parameters
-        n_hidden = 40,
+        n_hidden = 20,
         n_layers = 1,
 
         # training
         which_objective='CE',
         n_epochs = 300,
         batch_size = 10,
-        learning_rate = 0.01,
+        learning_rate = 0.001,
         frac_train = 0.7, # fraction of data to train net with
         start = 1,   # number of initial letters to cue net with
         n_repeats = 1, # max number of repeats of a given sequence
