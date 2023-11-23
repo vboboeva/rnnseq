@@ -242,20 +242,19 @@ def main(
     # ids = np.arange(len(all_tokens)) 
     
     # take all sequences and randomize them, split into train and test sets BALANCED
+    # ids in a 2d array, with
+    # - row -> type
+    # - column -> token in type
 
-    train_ids = []
-    test_ids = []
-    num_types = int(np.shape(all_tokens)[0]/num_tokens_onetype)
+    ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
+    for i, ids_type in enumerate(ids):
+        ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
 
-    for j in range(num_types):
-        ids = np.arange(j*num_tokens_onetype, (j+1)*num_tokens_onetype)
-        random.shuffle(ids) # random splitting
-        train_ids = np.append(train_ids, ids[:int(n_train/num_types)])
-        test_ids = np.append(test_ids, ids[int(n_train/num_types):])
+    num_types = int(len(all_tokens)/num_tokens_onetype)
+    n_train_type = n_train//num_types
+    train_ids = ids[:,:n_train_type].reshape(-1)
+    test_ids = ids[:,n_train_type:].reshape(-1)
 
-    train_ids = train_ids.astype(int)
-    test_ids = test_ids.astype(int)
-    
     X_train = x[:,train_ids,:]
     X_test = x[:,test_ids,:]
 
@@ -306,7 +305,7 @@ def main(
     # Wio=np.dot(model.fc.state_dict()["weight"].detach().cpu().numpy(),
     #  model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden.detach().cpu().numpy(), W_hh.detach().cpu().numpy()
+    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden.detach().cpu().numpy(), W_hh.detach().cpu().numpy()
 
 ##################################################
 
