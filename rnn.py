@@ -14,8 +14,8 @@ import random
 from train import train
 from train import predict
 from model import RNN
-from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
-from plot_utils import plot_fps_subspace
+#from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
+#from plot_utils import plot_fps_subspace
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import scipy
@@ -201,6 +201,7 @@ def main(
     n_layers = 1,
     # training
     which_objective='CE',
+    which_init=None,
     n_epochs = 10,
     batch_size = 10,
     learning_rate = 0.01,
@@ -211,7 +212,7 @@ def main(
     alpha = 5, # length of alphabet
     ):
 
-    output_folder_name = 'N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_datasplit%s'%(n_hidden, L, m, n_epochs, learning_rate, n_types, which_objective, sim_datasplit)
+    output_folder_name = 'N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_init%s_datasplit%s'%(n_hidden, L, m, n_epochs, learning_rate, n_types, which_objective, which_init, sim_datasplit)
 
     # this if statement creates problems
     # if not os.path.exists(output_folder_name):
@@ -285,9 +286,10 @@ def main(
     n_batches = len(tokens_train)//batch_size
 
     # input_num_units, hidden_num_units, num_layers, output_num_units
-    model = RNN(alpha, n_hidden, n_layers, alpha, device=device)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
     
+    model = RNN(alpha, n_hidden, n_layers, alpha, device=device, which_init=which_init)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
+
     # X_train is dimension L x len(trainingdata) x alpha
     losses_train, losses_test, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
 
@@ -324,9 +326,10 @@ if __name__ == "__main__":
 
         # training
         which_objective='CE',
+        which_init=None,
         n_epochs = 300,
         batch_size = 10,
-        learning_rate = 0.001,
+        learning_rate = 0.01,
         frac_train = 0.7, # fraction of data to train net with
         start = 1,   # number of initial letters to cue net with
         n_repeats = 1, # max number of repeats of a given sequence
