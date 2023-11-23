@@ -16,8 +16,9 @@ from tqdm import tqdm
 import string
 
 class RNN(nn.Module):
-    def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, \
-            nonlinearity="tanh", device="cpu"):
+    def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, 
+        nonlinearity="tanh", device="cpu", which_init=None):
+
         super(RNN, self).__init__()
 
         # Defining the number of layers and the nodes in each layer
@@ -33,6 +34,40 @@ class RNN(nn.Module):
         self.device = device
         self.to(self.device)
 
+        # custom (re-)initialization of the parameters of the network
+        if which_init is not None:
+            self.init_weights(which_init)        
+
+    def init_weights(self, scaling, seed=None):
+        
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        if scaling == "Rich":
+            # initialisation of the weights -- N(0, 1/n)
+            scaling_f = lambda f_in: 1./f_in
+        elif scaling == "Lazy":
+            # initialisation of the weights -- N(0, 1/sqrt(n))
+            scaling_f = lambda f_in: 1./np.sqrt(f_in)
+        elif scaling == "Const":
+            # initialisation of the weights independent of n
+            scaling_f = lambda f_in: 0.001
+        elif isinstance(scaling, float) and scaling > 0:
+            # initialisation of the weights -- N(0, 1/n**alpha)
+            '''
+            UNTESTED
+            '''
+            scaling_f = lambda f_in: 1./np.power(f_in, scaling)
+        else:
+            raise ValueError(
+                f"Invalid scaling option '{scaling}'\n" + \
+                 "Choose either 'sqrt', 'lin' or a float larger than 0")
+        
+        for name, pars in self.named_parameters():
+            if "weight" in name:
+                f_in = 1.*pars.data.size()[1]
+                std = scaling_f(f_in)
+                pars.data.normal_(0., std)
 
     def forward(self, x):
         '''
