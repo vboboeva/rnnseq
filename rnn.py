@@ -16,8 +16,8 @@ from train import predict
 from model import RNN
 #from FixedPointFinderTorch import FixedPointFinderTorch as FixedPointFinder
 #from plot_utils import plot_fps_subspace
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+#from sklearn.decomposition import PCA
+#from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import scipy
 import scipy.cluster.hierarchy as sch
 from itertools import permutations
@@ -148,7 +148,7 @@ def remove_subset(configurations, subset):
     filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
     return np.array(filtered)
 
-def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_h, W_hh):
+def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test):
 
     np.save('%s/loss_train_sim%d'%(output_folder_name, sim), losses_train)
     np.save('%s/loss_test_sim%d'%(output_folder_name, sim), losses_test)
@@ -162,8 +162,11 @@ def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, 
     np.save('%s/seq_retrieved_test_sim%d'%(output_folder_name, sim), seq_retrieved_test)
     np.save('%s/seq_retrieved_other_sim%d'%(output_folder_name, sim), seq_retrieved_other)
 
-    np.save('%s/yh_sim%d'%(output_folder_name, sim), y_h)
-    np.save('%s/Whh_sim%d'%(output_folder_name, sim), W_hh)
+    np.save('%s/yh_train_sim%d'%(output_folder_name, sim), yh_train)
+    np.save('%s/Whh_train_sim%d'%(output_folder_name, sim), Whh_train)
+
+    np.save('%s/yh_test_sim%d'%(output_folder_name, sim), yh_test)
+    np.save('%s/Whh_test_sim%d'%(output_folder_name, sim), Whh_test)
 
     # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), Wio)
     # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), count)
@@ -292,7 +295,8 @@ def main(
     # X_train is dimension L x len(trainingdata) x alpha
     losses_train, losses_test, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
 
-    y_hidden, W_hh = model.get_activity(X_train)
+    yh_train, Whh_train = model.get_activity(X_train)
+    yh_test, Whh_test = model.get_activity(X_test)
     
     ##########################
     # Fixed Points           #
@@ -305,14 +309,13 @@ def main(
     # Wio=np.dot(model.fc.state_dict()["weight"].detach().cpu().numpy(),
     #  model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden.detach().cpu().numpy(), W_hh.detach().cpu().numpy()
+    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train.detach().cpu().numpy(), Whh_train.detach().cpu().numpy(), yh_test.detach().cpu().numpy(), Whh_test.detach().cpu().numpy()
 
 ##################################################
 
 if __name__ == "__main__":
 
-    # run parameter
-    hpc=True
+    # parameters
     # load the number of inputs
     alpha=5
     alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
@@ -320,7 +323,7 @@ if __name__ == "__main__":
     params=loadtxt("params.txt", dtype='int')
 
     main_kwargs = dict(# network parameters
-        n_hidden = 20,
+        n_hidden = 50,
         n_layers = 1,
 
         # training
@@ -340,14 +343,10 @@ if __name__ == "__main__":
     L_col_index=0
     m_col_index=1
     sim_datasplit_col_index=2
-    sim_col_index=3
-
-    if hpc == True:
-        index = int(sys.argv[1])-1
-    else:
-        index = 1
-
-    size = 100
+    sim_col_index=3        
+    index = int(sys.argv[1])-1
+    
+    size = 20
     for i in range(size):
         row_index = index * size + i
         # print(index, row_index)
@@ -356,6 +355,6 @@ if __name__ == "__main__":
         m = params[row_index, m_col_index]
         sim_datasplit = params[row_index, sim_datasplit_col_index]
         
-        output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh = main(L, m, sim, sim_datasplit, **main_kwargs)
+        output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test = main(L, m, sim, sim_datasplit, **main_kwargs)
 
-        savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, y_hidden, W_hh)
+        savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test)
