@@ -11,9 +11,11 @@ import string
 from itertools import product
 
 
-def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, whichloss, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start):
+##########################################
+# train network to produce next letter   #
+##########################################
 
-	alpha=len(alphabet)
+def train(X_train, model, optimizer, whichloss, n_epochs, n_batches, batch_size):
 
 	if whichloss == 'CE':
 		loss_function = \
@@ -28,56 +30,12 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 	else:
 		print('Loss function not recognized!')
 
-	losses_train = []
-	losses_test = []
+	n_train = X_train.shape[1]
 
-	retr_train = []
-	retr_test = []
-	retr_other = []
-
-	n_train = X_train.shape[1] #len(train_ids)
-	n_test = X_test.shape[1] #len(test_ids)
-
-	for epoch in range(n_epochs): # tqdm(range())
-	
-		with torch.no_grad():
-
-			'''
-			Calculate train error and perf
-			'''
-			
-			X_train = X_train.to(model.device)
-			ht, hT, y_train = model(X_train)
-			y_train = y_train.to(model.device)
-
-			loss = loss_function(y_train[:-1], X_train[1:])
-			losses_train.append(loss.item())
-
-			'''
-			Calculate test error and performance
-			'''
-
-			X_test = X_test.to(model.device)
-			ht, hT, y_test = model(X_test)
-			y_test = y_test.to(model.device)
-
-			loss = loss_function(y_test[:-1], X_test[1:])
-			losses_test.append(loss.item())
-
-			predicted_list_train, predicted_list_test, predicted_list_other = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
-
-			retr_train.append(predicted_list_train)
-			retr_test.append(predicted_list_test)
-			retr_other.append(predicted_list_other)
-
-		##########################################
-		# train network to produce next letter   #
-		##########################################
+	for epoch in range(n_epochs): 	
 
 		# shuffle training data so that in each epoch data is split randomly in batches for training
-
 		_ids = torch.randperm(n_train)
-		# np.random.shuffle(train_ids)
 
 		# we are training in batches
 		for batch in range(n_batches):
@@ -96,7 +54,51 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 			loss.backward()
 			optimizer.step()
 
+##########################################
+# test network 						     #
+##########################################			
+
+def test(X_train, X_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, start):
+
+	losses_train = []
+	losses_test = []
+
+	retr_train = []
+	retr_test = []
+	retr_other = []	
+
+	with torch.no_grad():
+
+		'''
+		Calculate train error and perf
+		'''
+		
+		X_train = X_train.to(model.device)
+		ht, hT, y_train = model(X_train)
+		y_train = y_train.to(model.device)
+
+		loss = loss_function(y_train[:-1], X_train[1:])
+		losses_train.append(loss.item())
+
+		'''
+		Calculate test error and performance
+		'''
+
+		X_test = X_test.to(model.device)
+		ht, hT, y_test = model(X_test)
+		y_test = y_test.to(model.device)
+
+		loss = loss_function(y_test[:-1], X_test[1:])
+		losses_test.append(loss.item())
+
+		predicted_list_train, predicted_list_test, predicted_list_other = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
+
+		retr_train.append(predicted_list_train)
+		retr_test.append(predicted_list_test)
+		retr_other.append(predicted_list_other)
+
 	return losses_train, losses_test, np.array(retr_train), np.array(retr_test), np.array(retr_other)
+
 
 def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L):
 
