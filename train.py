@@ -41,9 +41,11 @@ def train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optim
 	for epoch in range(n_epochs): # tqdm(range())
 	
 		with torch.no_grad():
+
 			'''
 			Calculate train error and perf
 			'''
+			
 			X_train = X_train.to(model.device)
 			ht, hT, y_train = model(X_train)
 			y_train = y_train.to(model.device)

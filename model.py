@@ -117,6 +117,4 @@ class RNN(nn.Module):
 
             y = ht.permute(1,0,2) # y is of size num_trials x L x N 
 
-            W_hh = self.rnn.weight_hh_l0
-
-        return y, W_hh
+        return y

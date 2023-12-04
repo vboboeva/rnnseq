@@ -148,7 +148,7 @@ def remove_subset(configurations, subset):
     filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
     return np.array(filtered)
 
-def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test):
+def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other,seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, yh_test, Whh):
 
     np.save('%s/loss_train_sim%d'%(output_folder_name, sim), losses_train)
     np.save('%s/loss_test_sim%d'%(output_folder_name, sim), losses_test)
@@ -163,10 +163,8 @@ def savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, 
     np.save('%s/seq_retrieved_other_sim%d'%(output_folder_name, sim), seq_retrieved_other)
 
     np.save('%s/yh_train_sim%d'%(output_folder_name, sim), yh_train)
-    np.save('%s/Whh_train_sim%d'%(output_folder_name, sim), Whh_train)
-
     np.save('%s/yh_test_sim%d'%(output_folder_name, sim), yh_test)
-    np.save('%s/Whh_test_sim%d'%(output_folder_name, sim), Whh_test)
+    np.save('%s/Whh_sim%d'%(output_folder_name, sim), Whh)
 
     # np.savetxt('output/Wio_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), Wio)
     # np.savetxt('output/count_L%d_m%d_nepochs%d_loss%s.txt'%(L,m,n_epochs,which_objective), count)
@@ -295,8 +293,10 @@ def main(
     # X_train is dimension L x len(trainingdata) x alpha
     losses_train, losses_test, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other = train(X_train, X_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, start)
 
-    yh_train, Whh_train = model.get_activity(X_train)
-    yh_test, Whh_test = model.get_activity(X_test)
+    yh_train = model.get_activity(X_train)
+    yh_test = model.get_activity(X_test)
+
+    Whh = model.rnn.weight_hh_l0
     
     ##########################
     # Fixed Points           #
@@ -309,7 +309,7 @@ def main(
     # Wio=np.dot(model.fc.state_dict()["weight"].detach().cpu().numpy(),
     #  model.rnn.state_dict()["weight_ih_l0"].detach().cpu().numpy() )
 
-    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train.detach().cpu().numpy(), Whh_train.detach().cpu().numpy(), yh_test.detach().cpu().numpy(), Whh_test.detach().cpu().numpy()
+    return output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train.detach().cpu().numpy(), yh_test.detach().cpu().numpy(), Whh.detach().cpu().numpy()
 
 ##################################################
 
@@ -355,6 +355,6 @@ if __name__ == "__main__":
         m = params[row_index, m_col_index]
         sim_datasplit = params[row_index, sim_datasplit_col_index]
         
-        output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test = main(L, m, sim, sim_datasplit, **main_kwargs)
+        output_folder_name, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, yh_test, Whh = main(L, m, sim, sim_datasplit, **main_kwargs)
 
-        savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, Whh_train, yh_test, Whh_test)
+        savefiles(output_folder_name, sim, losses_train, losses_test, tokens_train, tokens_test, tokens_other, seq_retrieved_train, seq_retrieved_test, seq_retrieved_other, yh_train, yh_test, Whh)
