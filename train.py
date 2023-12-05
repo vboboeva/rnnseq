@@ -18,18 +18,6 @@ from itertools import product
 
 def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task):
 
-	# Define task-specific operations
-	def prediction_task():
-		return test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task)
-
-	def classification_task():
-		return test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task)
-
-	task_operations = {
-		'Pred': prediction_task,
-		'Class': classification_task
-	}
-
 	# Common setup for loss functions
 	if which_objective == 'CE':
 		loss_function = lambda output, target: F.cross_entropy(output, target, reduction="mean")
@@ -55,8 +43,9 @@ def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_ot
 	n_train = X_train.shape[1]
 
 	for epoch in range(n_epochs):
-		# Call the task-specific function
-		task_output = task_operations[which_task]()
+		
+		task_output = test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task)
+
 		losses_train, losses_test = task_output[:2]
 
 		# shuffle training data
