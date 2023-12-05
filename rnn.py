@@ -123,15 +123,27 @@ def savefiles(sim, which_task, output_folder_name, model, yh_train, yh_test, Whh
 	np.save('%s/yh_test_sim%d' % (output_folder_name, sim), yh_test)
 	np.save('%s/Whh_sim%d' % (output_folder_name, sim), Whh)
 
-	# Save task-specific files
-	if which_task == 'Pred':
-		np.save('%s/seq_retrieved_train_sim%d' % (output_folder_name, sim), seq_retrieved_train)
-		np.save('%s/seq_retrieved_test_sim%d' % (output_folder_name, sim), seq_retrieved_test)
-		np.save('%s/seq_retrieved_other_sim%d' % (output_folder_name, sim), seq_retrieved_other)
+	# # Save task-specific files
+	# if which_task == 'Pred':
+	# 	np.save('%s/seq_retrieved_train_sim%d' % (output_folder_name, sim), seq_retrieved_train)
+	# 	np.save('%s/seq_retrieved_test_sim%d' % (output_folder_name, sim), seq_retrieved_test)
+	# 	np.save('%s/seq_retrieved_other_sim%d' % (output_folder_name, sim), seq_retrieved_other)
 
-	elif which_task == 'Class':
-		np.save('%s/accuracies_train_sim%d' % (output_folder_name, sim), accuracies_train)
-		np.save('%s/accuracies_test_sim%d' % (output_folder_name, sim), accuracies_test)
+	# elif which_task == 'Class':
+	# 	np.save('%s/accuracy_train_sim%d' % (output_folder_name, sim), accuracies_train)
+	# 	np.save('%s/accuracy_test_sim%d' % (output_folder_name, sim), accuracies_test)
+
+	# Save task-specific files
+	if seq_retrieved_train is not None:
+		np.save('%s/seq_retrieved_train_sim%d' % (output_folder_name, sim), seq_retrieved_train)
+	if seq_retrieved_test is not None:
+		np.save('%s/seq_retrieved_test_sim%d' % (output_folder_name, sim), seq_retrieved_test)
+	if seq_retrieved_other is not None:
+		np.save('%s/seq_retrieved_other_sim%d' % (output_folder_name, sim), seq_retrieved_other)
+	if accuracies_train is not None:
+		np.save('%s/accuracy_train_sim%d' % (output_folder_name, sim), accuracies_train)
+	if accuracies_test is not None:
+		np.save('%s/accuracy_test_sim%d' % (output_folder_name, sim), accuracies_test)
 
 
 ###########################################
@@ -216,13 +228,9 @@ def main(
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
-	task_functions = {
-		'Pred': lambda: train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, 'Pred'),
-		'Class': lambda: train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, 'Class')
-	}
-
-	if which_task in task_functions:
-		task_results = task_functions[which_task]()
+	# if which_task in task_functions:
+	if which_task in ['Pred', 'Class']:
+		task_results = train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task)
 	else:
 		print("Task not recognized!")
 		return
@@ -232,7 +240,7 @@ def main(
 	yh_test = model.get_activity(X_test).detach().cpu().numpy()
 	Whh = model.rnn.weight_hh_l0.detach().cpu().numpy()
 
-	return (output_folder_name, model, yh_train, yh_test, Whh, tokens_train, tokens_test, tokens_other, *task_results)
+	return (output_folder_name, model, yh_train, yh_test, Whh, tokens_train, tokens_test, tokens_other), task_results
 
 ##################################################
 
@@ -247,7 +255,7 @@ if __name__ == "__main__":
 		which_task='Class',  # Directly specify the task here
 		which_objective='CE',
 		which_init=None,
-		n_epochs = 3000,
+		n_epochs = 10,
 		batch_size = 10,
 		learning_rate = 0.01,
 		frac_train = 0.7,
@@ -272,8 +280,10 @@ if __name__ == "__main__":
 		m = params[row_index, m_col_index]
 		sim_datasplit = params[row_index, sim_datasplit_col_index]
 
-		result = main(L, m, sim, sim_datasplit, **main_kwargs)
-		savefiles(sim, main_kwargs['which_task'], *result)
+		result, task_results = main(L, m, sim, sim_datasplit, **main_kwargs)
+		print(*result)
+		savefiles(sim, main_kwargs['which_task'], *result, *task_results)
+
 
 ######### if using repetitions of train data ####
 # tokens_train_repeated, X_train_repeated = make_repetitions(tokens_train, X_train, n_repeats)
