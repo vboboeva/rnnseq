@@ -16,7 +16,7 @@ from itertools import product
 ##########################################
 
 
-def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task):
+def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task):
 
 	# Common setup for loss functions
 	if which_objective == 'CE':
@@ -44,9 +44,7 @@ def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_ot
 
 	for epoch in range(n_epochs):
 		
-		task_output = test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task)
-
-		losses_train, losses_test = task_output[:2]
+		test(X_train, X_test, y_train, y_test, results['Tokens']['train'], results['Tokens']['test'], results['Tokens']['other'], model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
 
 		# shuffle training data
 		_ids = torch.randperm(n_train)
@@ -57,6 +55,7 @@ def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_ot
 			optimizer.zero_grad()
 			batch_start = batch * batch_size
 			batch_end = (batch + 1) * batch_size
+
 			X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
 
 			if which_task == 'Pred':
@@ -71,13 +70,13 @@ def train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_ot
 			loss.backward()
 			optimizer.step()
 
-	return task_output
+	return results
 
 ##########################################
 # 				test network 			 #
 ##########################################	
 
-def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task):
+def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results):
 
 	# Define loss functions
 	loss_functions = {
@@ -89,63 +88,37 @@ def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_oth
 		print('Loss function not recognized!')
 		return
 
-	# Initialize results containers
-	results = {
-		'Pred': ([], [], [], [], []),
-		'Class': ([], [], [], [])
-	}
-
-	if which_task not in results:
-		print('Task not recognized!')
-		return
-
 	n_train = X_train.shape[1] 
 	n_test = X_test.shape[1] 
 
 	with torch.no_grad():
+
 		# Process training data
-		X_train = X_train.to(model.device)
-		ht, hT, out_train = model(X_train)
-		process_task_data(X_train, y_train, out_train, n_train, which_task, loss_function, results, tokens_train, tokens_test, tokens_other, alphabet, letter_to_index, index_to_letter, L, model, 'train')
+		for X, y, label, n in zip([X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
 
-		# Process test data
-		X_test = X_test.to(model.device)
-		ht, hT, out_test = model(X_test)
-		process_task_data(X_test, y_test, out_test, n_test, which_task, loss_function, results, tokens_train, tokens_test, tokens_other, alphabet, letter_to_index, index_to_letter, L, model, 'test')
+			X = X.to(model.device)
 
-	return tuple(results[which_task])
+			if which_task == 'Pred':
+				ht, hT, out = model(X)
+				loss = loss_function(out[:-1], X[1:])
 
-def process_task_data(X, y, out, n, which_task, loss_function, results, tokens_train, tokens_test, tokens_other, alphabet, letter_to_index, index_to_letter, L, model, data_type):
-	
-	# Shared operations
-	if which_task == 'Pred':
-		loss = loss_function(out[:-1], X[1:])
-		
-		if data_type == 'test':
-			predicted_lists = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)
+			elif which_task == 'Class':
+				y = y.to(model.device)
+				ht, hT, out = model(X)
+				loss = loss_function(out[-1], y)
+				labels = torch.argmax(y, dim=-1)
+				preds = torch.argmax(out[-1], dim=-1)
+				accuracy = preds.eq(labels).sum().item() / n
+				results['Accuracy'][label].append(accuracy)
 
-			results[which_task][2].append(predicted_lists[0])  # retr_train
-			results[which_task][3].append(predicted_lists[1])  # retr_test
-			results[which_task][4].append(predicted_lists[2])  # retr_other    
+			results['Loss'][label].append(loss)
 
-	elif which_task == 'Class':
-		
-		y = y.to(model.device)
-		loss = loss_function(out[-1], y)
-		labels = torch.argmax(y, dim=-1)
-		preds = torch.argmax(out[-1], dim=-1)
-		accuracy = preds.eq(labels).sum().item() / n
-		
-		if data_type == 'train':
-			results[which_task][2].append(accuracy)  # accuracies_train
-		else:
-			results[which_task][3].append(accuracy)  # accuracies_test
+		if which_task == 'Pred':
+			predicted_lists = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)	
 
-	# Append loss to respective list
-	if data_type == 'train':
-		results[which_task][0].append(loss.item())  # losses_train
-	else:
-		results[which_task][1].append(loss.item())  # losses_test
+			results['Retrieval']['train'].append(predicted_lists[0])
+			results['Retrieval']['test'].append(predicted_lists[1])
+			results['Retrieval']['other'].append(predicted_lists[2])
 
 def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L):
 

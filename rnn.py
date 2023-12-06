@@ -108,43 +108,24 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
-def savefiles(sim, which_task, output_folder_name, model, yh_train, yh_test, Whh, tokens_train, tokens_test, tokens_other, losses_train, losses_test, seq_retrieved_train=None, seq_retrieved_test=None, seq_retrieved_other=None, accuracies_train=None, accuracies_test=None):
-
+def savefiles(output_folder_name, sim, which_task, model, results):
+	
 	# Save the model state
 	torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
+	# Save the connectivity
+	np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
 
-	# Save common files
-	np.save('%s/loss_train_sim%d' % (output_folder_name, sim), losses_train)
-	np.save('%s/loss_test_sim%d' % (output_folder_name, sim), losses_test)
-	np.save('%s/tokens_train' % output_folder_name, tokens_train)
-	np.save('%s/tokens_test' % output_folder_name, tokens_test)
-	np.save('%s/tokens_other' % output_folder_name, tokens_other)
-	np.save('%s/yh_train_sim%d' % (output_folder_name, sim), yh_train)
-	np.save('%s/yh_test_sim%d' % (output_folder_name, sim), yh_test)
-	np.save('%s/Whh_sim%d' % (output_folder_name, sim), Whh)
+	# Save files not sim specific
+	for key in results['Tokens'].keys():
+		np.save('%s/%s_%s' % (output_folder_name, 'Tokens', key), results['Tokens'][key])	
 
-	# # Save task-specific files
-	# if which_task == 'Pred':
-	# 	np.save('%s/seq_retrieved_train_sim%d' % (output_folder_name, sim), seq_retrieved_train)
-	# 	np.save('%s/seq_retrieved_test_sim%d' % (output_folder_name, sim), seq_retrieved_test)
-	# 	np.save('%s/seq_retrieved_other_sim%d' % (output_folder_name, sim), seq_retrieved_other)
+	sub_results = {k: v for k, v in results.items() if k not in ['Tokens', 'Whh']}
 
-	# elif which_task == 'Class':
-	# 	np.save('%s/accuracy_train_sim%d' % (output_folder_name, sim), accuracies_train)
-	# 	np.save('%s/accuracy_test_sim%d' % (output_folder_name, sim), accuracies_test)
-
-	# Save task-specific files
-	if seq_retrieved_train is not None:
-		np.save('%s/seq_retrieved_train_sim%d' % (output_folder_name, sim), seq_retrieved_train)
-	if seq_retrieved_test is not None:
-		np.save('%s/seq_retrieved_test_sim%d' % (output_folder_name, sim), seq_retrieved_test)
-	if seq_retrieved_other is not None:
-		np.save('%s/seq_retrieved_other_sim%d' % (output_folder_name, sim), seq_retrieved_other)
-	if accuracies_train is not None:
-		np.save('%s/accuracy_train_sim%d' % (output_folder_name, sim), accuracies_train)
-	if accuracies_test is not None:
-		np.save('%s/accuracy_test_sim%d' % (output_folder_name, sim), accuracies_test)
-
+	for key in sub_results.keys():
+		nested_keys = [k for k in sub_results[key].keys()]
+		for nk in nested_keys:
+			if results[key][nk] != []:
+				np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
 ###########################################
 ################## M A I N ################
@@ -166,10 +147,6 @@ def main(
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
 	alpha=5,  # length of alphabet
 ):
-	output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_init%s_datasplit%s' % (
-		which_task, n_hidden, L, m, n_epochs, learning_rate, n_types, which_objective, which_init, sim_datasplit)
-
-	os.makedirs(output_folder_name, exist_ok=True)    
 
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
@@ -228,19 +205,43 @@ def main(
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
+	results = { 'Tokens': {
+			'train': tokens_train,
+			'test': tokens_test,
+			'other': tokens_other
+		},
+	    'Loss': {
+	        'train': [],
+	        'test': []
+	    },
+	    'Retrieval': {
+	        'train': [],
+	        'test': [],
+	        'other': []
+	    },
+	    'Accuracy': {
+	        'train': [],
+	        'test': []
+	    }
+	}
+
 	# if which_task in task_functions:
 	if which_task in ['Pred', 'Class']:
-		task_results = train(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task)
+		task_results = train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task=which_task)
 	else:
 		print("Task not recognized!")
 		return
 
 	# Post-training operations
-	yh_train = model.get_activity(X_train).detach().cpu().numpy()
-	yh_test = model.get_activity(X_test).detach().cpu().numpy()
-	Whh = model.rnn.weight_hh_l0.detach().cpu().numpy()
 
-	return (output_folder_name, model, yh_train, yh_test, Whh, tokens_train, tokens_test, tokens_other), task_results
+	results.update({
+		'yh': {'train': model.get_activity(X_train).detach().cpu().numpy(),
+		'test': model.get_activity(X_test).detach().cpu().numpy() 
+		},
+	'Whh': model.rnn.weight_hh_l0.detach().cpu().numpy()
+	})
+
+	return model, results
 
 ##################################################
 
@@ -252,12 +253,12 @@ if __name__ == "__main__":
 		# network parameters
 		n_hidden = 50,
 		n_layers = 1,
-		which_task='Class',  # Directly specify the task here
+		which_task='Pred',  # Directly specify the task here
 		which_objective='CE',
 		which_init=None,
-		n_epochs = 10,
+		n_epochs = 3000,
 		batch_size = 10,
-		learning_rate = 0.01,
+		learning_rate = 0.001,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
@@ -280,9 +281,13 @@ if __name__ == "__main__":
 		m = params[row_index, m_col_index]
 		sim_datasplit = params[row_index, sim_datasplit_col_index]
 
-		result, task_results = main(L, m, sim, sim_datasplit, **main_kwargs)
-		print(*result)
-		savefiles(sim, main_kwargs['which_task'], *result, *task_results)
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_init%s_datasplit%s' % (
+		main_kwargs['which_task'], main_kwargs['n_hidden'], L, m, main_kwargs['n_epochs'], main_kwargs['learning_rate'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
+
+		os.makedirs(output_folder_name, exist_ok=True)
+
+		model, results = main(L, m, sim, sim_datasplit, **main_kwargs)
+		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results)
 
 
 ######### if using repetitions of train data ####
