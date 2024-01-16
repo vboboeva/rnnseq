@@ -124,7 +124,7 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	for key in sub_results.keys():
 		nested_keys = [k for k in sub_results[key].keys()]
 		for nk in nested_keys:
-			if results[key][nk] != []:
+			if len(results[key][nk]) != 0:
 				np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
 ###########################################
@@ -132,22 +132,21 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 ###########################################
 
 def main(
-	L, m, sim, sim_datasplit,
+	learning_rate, batch_size, sim, sim_datasplit,
 	# network parameters
 	n_hidden=40,
 	n_layers=1,
+	L = 4,
+	m = 2,
 	which_task=None,
 	which_objective='CE',
 	which_init=None,
 	n_epochs=10,
-	batch_size=10,
-	learning_rate=0.01,
 	frac_train=0.7,  # fraction of data to train net with
 	n_repeats=1,  # max number of repeats of a given sequence
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
 	alpha=5,  # length of alphabet
 ):
-
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
 
@@ -247,18 +246,18 @@ def main(
 
 if __name__ == "__main__":
 
-	params = loadtxt("params.txt", dtype='int')
+	params = loadtxt("params.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_hidden = 50,
 		n_layers = 1,
-		which_task='Pred',  # Directly specify the task here
-		which_objective='CE',
-		which_init=None,
-		n_epochs = 3000,
-		batch_size = 10,
-		learning_rate = 0.001,
+		L = 4,
+		m = 2,
+		which_task = 'Pred',  # Directly specify the task here
+		which_objective = 'CE',
+		which_init = None,
+		n_epochs = 5000,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
@@ -267,28 +266,28 @@ if __name__ == "__main__":
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
 
-	L_col_index = 0
-	m_col_index = 1
+	lr_col_index = 0
+	bs_col_index = 1
 	sim_datasplit_col_index = 2
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
 
-	size = 20
+	size = 50
 	for i in range(size):
 		row_index = index * size + i
-		sim = params[row_index, sim_col_index]
-		L = params[row_index, L_col_index]
-		m = params[row_index, m_col_index]
-		sim_datasplit = params[row_index, sim_datasplit_col_index]
+		learning_rate = params[row_index, lr_col_index]
+		
+		batch_size = int(params[row_index, bs_col_index])
+		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
+		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_ntypes%d_obj%s_init%s_datasplit%s' % (
-		main_kwargs['which_task'], main_kwargs['n_hidden'], L, m, main_kwargs['n_epochs'], main_kwargs['learning_rate'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_datasplit%s' % (
+		main_kwargs['which_task'], main_kwargs['n_hidden'], main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, batch_size, main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		model, results = main(L, m, sim, sim_datasplit, **main_kwargs)
+		model, results = main(learning_rate, batch_size, sim, sim_datasplit, **main_kwargs)
 		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results)
-
 
 ######### if using repetitions of train data ####
 # tokens_train_repeated, X_train_repeated = make_repetitions(tokens_train, X_train, n_repeats)
