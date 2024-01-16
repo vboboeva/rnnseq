@@ -132,9 +132,8 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 ###########################################
 
 def main(
-	learning_rate, batch_size, sim, sim_datasplit,
+	learning_rate, n_hidden, sim, sim_datasplit,
 	# network parameters
-	n_hidden=40,
 	n_layers=1,
 	L = 4,
 	m = 2,
@@ -142,6 +141,7 @@ def main(
 	which_objective='CE',
 	which_init=None,
 	n_epochs=10,
+	batch_size=8,
 	frac_train=0.7,  # fraction of data to train net with
 	n_repeats=1,  # max number of repeats of a given sequence
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
@@ -250,7 +250,6 @@ if __name__ == "__main__":
 
 	main_kwargs = dict(
 		# network parameters
-		n_hidden = 50,
 		n_layers = 1,
 		L = 4,
 		m = 2,
@@ -258,6 +257,7 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = None,
 		n_epochs = 5000,
+		batch_size = 8,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
@@ -267,7 +267,7 @@ if __name__ == "__main__":
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
 
 	lr_col_index = 0
-	bs_col_index = 1
+	n_hidden_col_index = 1
 	sim_datasplit_col_index = 2
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
@@ -277,16 +277,16 @@ if __name__ == "__main__":
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
 		
-		batch_size = int(params[row_index, bs_col_index])
+		n_hidden = int(params[row_index, n_hidden_col_index])
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
 		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_datasplit%s' % (
-		main_kwargs['which_task'], main_kwargs['n_hidden'], main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, batch_size, main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
+		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		model, results = main(learning_rate, batch_size, sim, sim_datasplit, **main_kwargs)
+		model, results = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
 		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results)
 
 ######### if using repetitions of train data ####
