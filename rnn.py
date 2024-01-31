@@ -96,6 +96,7 @@ def load_tokens(alpha, L, m, n_types, letter_to_index):
 		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
 		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
 
+	print('total number of tokens=', np.shape(all_tokens)[0])
 	return X, y, all_tokens, all_labels, np.shape(tokens)[0]
 
 def generate_configurations(L, alphabet):
@@ -140,6 +141,7 @@ def main(
 	which_task=None,
 	which_objective='CE',
 	which_init=None,
+	which_transfer='tanh',
 	n_epochs=10,
 	batch_size=8,
 	frac_train=0.7,  # fraction of data to train net with
@@ -199,7 +201,7 @@ def main(
 		raise ValueError(f"Invalid task: {which_task}")
 
 	# Create the model
-	model = RNN(alpha, n_hidden, n_layers, output_size, device=device, which_init=which_init)
+	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init)
 
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
@@ -256,6 +258,7 @@ if __name__ == "__main__":
 		which_task = 'Pred',  # Directly specify the task here
 		which_objective = 'CE',
 		which_init = None,
+		which_transfer='relu',
 		n_epochs = 5000,
 		batch_size = 8,
 		frac_train = 0.7,
@@ -281,8 +284,8 @@ if __name__ == "__main__":
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_datasplit%s' % (
-		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'], sim_datasplit)
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s' % (
+		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
