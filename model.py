@@ -112,9 +112,9 @@ class RNN(nn.Module):
 
             ht, hT, _  = self.forward(_x)
 
-            # print('ht', np.shape(ht))
-            # print('hT', np.shape(hT))
+            # print('ht', np.shape(ht)) # activity for whole sequence
+            # print('hT', np.shape(hT)) # activity for last element of sequence
 
-            y = ht.permute(1,0,2) # y is of size num_trials x L x N 
+            y = ht.permute(1,0,2) # y is of size num_tokens (train/test) x L x N 
 
         return y

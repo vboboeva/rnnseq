@@ -16,7 +16,7 @@ from itertools import product
 ##########################################
 
 
-def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task):
+def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task ):
 
 	# Common setup for loss functions
 	if which_objective == 'CE':
@@ -44,7 +44,7 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 
 	for epoch in range(n_epochs):
 		
-		test(X_train, X_test, y_train, y_test, results['Tokens']['train'], results['Tokens']['test'], results['Tokens']['other'], model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+		test(X_train, X_test, y_train, y_test, results['Tokens']['train'], results['Tokens']['test'], results['Tokens']['other'], model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, epoch, epochs_snapshot)
 
 		# shuffle training data
 		_ids = torch.randperm(n_train)
@@ -76,7 +76,7 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 # 				test network 			 #
 ##########################################	
 
-def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results):
+def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, epoch, epochs_snapshot):
 
 	# Define loss functions
 	loss_functions = {
@@ -94,7 +94,7 @@ def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_oth
 	with torch.no_grad():
 
 		# Process training data
-		for X, y, label, n in zip([X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
+		for X, y, whichset, n in zip([X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
 
 			X = X.to(model.device)
 
@@ -109,9 +109,11 @@ def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_oth
 				labels = torch.argmax(y, dim=-1)
 				preds = torch.argmax(out[-1], dim=-1)
 				accuracy = preds.eq(labels).sum().item() / n
-				results['Accuracy'][label].append(accuracy)
+				results['Accuracy'][whichset].append(accuracy)
 
-			results['Loss'][label].append(loss)
+			results['Loss'][whichset].append(loss)
+			if epoch in epochs_snapshot:
+				results['yh'][whichset].append(ht.permute(1,0,2))
 
 		if which_task == 'Pred':
 			predicted_lists = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)	

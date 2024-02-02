@@ -148,6 +148,7 @@ def main(
 	n_repeats=1,  # max number of repeats of a given sequence
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
 	alpha=5,  # length of alphabet
+	snap_freq=2
 ):
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
@@ -200,6 +201,9 @@ def main(
 	if output_size is None:
 		raise ValueError(f"Invalid task: {which_task}")
 
+	# n_epochs for which take a snapshot of neural activity
+	epochs_snapshot = [snap_freq*i for i in range(0, int(n_epochs/snap_freq)+1)]
+
 	# Create the model
 	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init)
 
@@ -223,23 +227,23 @@ def main(
 	    'Accuracy': {
 	        'train': [],
 	        'test': []
+	    },
+	    'yh': {
+	    	'train': [],
+	    	'test': []
 	    }
 	}
 
 	# if which_task in task_functions:
 	if which_task in ['Pred', 'Class']:
-		task_results = train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task=which_task)
+		task_results = train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task=which_task)
 	else:
 		print("Task not recognized!")
 		return
 
 	# Post-training operations
 
-	results.update({
-		'yh': {'train': model.get_activity(X_train).detach().cpu().numpy(),
-		'test': model.get_activity(X_test).detach().cpu().numpy() 
-		},
-	'Whh': model.rnn.weight_hh_l0.detach().cpu().numpy()
+	results.update({'Whh': model.rnn.weight_hh_l0.detach().cpu().numpy()
 	})
 
 	return model, results
@@ -265,6 +269,7 @@ if __name__ == "__main__":
 		n_repeats = 1,
 		n_types = -1,
 		alpha = 5,
+		snap_freq = 200 # snapshot of net activity every snap_freq epochs
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
