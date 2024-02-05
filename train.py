@@ -113,7 +113,7 @@ def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_oth
 
 			results['Loss'][whichset].append(loss)
 			if epoch in epochs_snapshot:
-				results['yh'][whichset].append(ht.permute(1,0,2))
+				results['yh'][whichset].append(ht.permute(1,0,2).detach().cpu().numpy())
 
 		if which_task == 'Pred':
 			predicted_lists = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)	
