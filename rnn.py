@@ -11,24 +11,14 @@ from pprint import pprint
 from tqdm import tqdm
 import string
 import random
-from train import train
-from train import predict
-from model import RNN
 import scipy
-import scipy.cluster.hierarchy as sch
 from itertools import permutations
 from itertools import product
 from matplotlib import rc
 from pylab import rcParams
 
-# # the axes attributes need to be set before the call to subplot
-# rc('font',**{'family':'sans-serif','sans-serif':['Arial']}, size=10)
-# rc('text', usetex=True)
-# rc('axes', edgecolor='black', linewidth=0.5)
-# rc('legend', frameon=False)
-# rcParams['ytick.direction'] = 'in'
-# rcParams['xtick.direction'] = 'in'
-# rcParams['text.latex.preamble'] = r'\usepackage{sfmath}' # \boldmath
+from train import train
+from model import RNN
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -109,24 +99,62 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
+def make_results_dict(tokens_train, tokens_test, tokens_other):
+	# Set up the dictionary that will contain results for each token
+	results = {}
+	for which_result in ['Loss', 'Retrieval', 'Accuracy', 'yh']:
+		results.update({which_result:{}}) 
+		for myset, label in (zip([tokens_train, tokens_test, tokens_other], ['train','test','other'])):
+			results[which_result].update({label:{}}) 
+			for idx_token, token in enumerate(myset):
+				temp = ''.join(token)
+				results[which_result][label].update({temp:[]})
+
+	results.update({'Whh':[]})
+	return results
+
+
 def savefiles(output_folder_name, sim, which_task, model, results):
 	
 	# Save the model state
 	torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
-	# Save the connectivity
+	
+	# Save snapshots of connectivity across training 
 	np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
 
-	# Save files not sim specific
-	for key in results['Tokens'].keys():
-		np.save('%s/%s_%s' % (output_folder_name, 'Tokens', key), results['Tokens'][key])	
-
-	sub_results = {k: v for k, v in results.items() if k not in ['Tokens', 'Whh']}
+	sub_results = {k: v for k, v in results.items() if k not in ['Whh']}
 
 	for key in sub_results.keys():
 		nested_keys = [k for k in sub_results[key].keys()]
 		for nk in nested_keys:
 			if len(results[key][nk]) != 0:
-				np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
+				if which_task == 'Class':
+					if key != 'Retrieval':
+						if nk != 'other':
+							print('entered if')
+							np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
+				elif which_task == 'Pred':
+					if key != 'Accuracy':
+							np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
+
+def quick_plot(results):
+	fig, ax = plt.subplots(1,2, figsize=(13,8))
+
+	# mean_acc=np.zeros(len(results['Accuracy']['train'][next(iter(results['Accuracy']['train']))]))
+	mean_loss=np.zeros(len(results['Loss']['train'][next(iter(results['Loss']['train']))]))
+
+	count=0
+	for tok in results['Accuracy']['train'].keys():
+		ax[0].plot(results['Loss']['train'][tok])
+		# ax[1].plot(results['Accuracy']['train'][tok])
+		
+		mean_loss+=results['Loss']['train'][tok]
+		# mean_acc+=results['Accuracy']['train'][tok]
+		count+=1
+	
+	ax[0].plot(mean_loss/count, color='black', lw=5)
+	# ax[1].plot(mean_acc/count, color='black', lw=5)
+	plt.show()
 
 ###########################################
 ################## M A I N ################
@@ -210,41 +238,18 @@ def main(
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
-	results = { 'Tokens': {
-			'train': tokens_train,
-			'test': tokens_test,
-			'other': tokens_other
-		},
-	    'Loss': {
-	        'train': [],
-	        'test': []
-	    },
-	    'Retrieval': {
-	        'train': [],
-	        'test': [],
-	        'other': []
-	    },
-	    'Accuracy': {
-	        'train': [],
-	        'test': []
-	    },
-	    'yh': {
-	    	'train': [],
-	    	'test': []
-	    }
-	}
+	# Set up the results dictionary
+	results=make_results_dict(tokens_train, tokens_test, tokens_other)
 
-	# if which_task in task_functions:
+	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
 		task_results = train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task=which_task)
 	else:
 		print("Task not recognized!")
 		return
 
-	# Post-training operations
-
-	results.update({'Whh': model.rnn.weight_hh_l0.detach().cpu().numpy()
-	})
+	# Quick and dirty plot of loss (comment when running on cluster, for local use)
+	# quick_plot(results)
 
 	return model, results
 
@@ -252,24 +257,24 @@ def main(
 
 if __name__ == "__main__":
 
-	params = loadtxt("params.txt")
+	params = loadtxt("params_test.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1,
 		L = 4,
 		m = 2,
-		which_task = 'Pred',  # Directly specify the task here
+		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 5000,
+		n_epochs = 2000,
 		batch_size = 8,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
 		alpha = 5,
-		snap_freq = 200 # snapshot of net activity every snap_freq epochs
+		snap_freq = 100 # snapshot of net activity every snap_freq epochs
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
@@ -280,7 +285,7 @@ if __name__ == "__main__":
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
 
-	size = 50
+	size = 1
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
@@ -295,16 +300,6 @@ if __name__ == "__main__":
 		os.makedirs(output_folder_name, exist_ok=True)
 
 		model, results = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
+
+		print('SAVING FILES')
 		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results)
-
-######### if using repetitions of train data ####
-# tokens_train_repeated, X_train_repeated = make_repetitions(tokens_train, X_train, n_repeats)
-	
-# X_train_repeated=torch.tensor(X_train_repeated)
-
-# # make sure batch size is not larger than total amount of data
-# if len(tokens_train_repeated) <= batch_size:
-#     batch_size = len(tokens_train_repeated)    
-
-# n_batches = len(tokens_train_repeated)//batch_size
-##################################################

@@ -44,7 +44,8 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 
 	for epoch in range(n_epochs):
 		
-		test(X_train, X_test, y_train, y_test, results['Tokens']['train'], results['Tokens']['test'], results['Tokens']['other'], model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, epoch, epochs_snapshot)
+		if epoch in epochs_snapshot:
+			test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
 
 		# shuffle training data
 		_ids = torch.randperm(n_train)
@@ -76,7 +77,12 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 # 				test network 			 #
 ##########################################	
 
-def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_other, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, epoch, epochs_snapshot):
+
+def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results):
+
+	tokens_train=results['Loss']['train'].keys()
+	tokens_test=results['Loss']['test'].keys()
+	tokens_other=results['Loss']['other'].keys()
 
 	# Define loss functions
 	loss_functions = {
@@ -93,65 +99,50 @@ def test(X_train, X_test, y_train, y_test, tokens_train, tokens_test, tokens_oth
 
 	with torch.no_grad():
 
-		# Process training data
-		for X, y, whichset, n in zip([X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
+		results['Whh'].append(model.rnn.weight_hh_l0.detach().cpu().numpy())
+		
+		for tokens, X, y, whichset, n in zip([tokens_train, tokens_test], [X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
 
+			X = X.permute((1,0,2))
 			X = X.to(model.device)
 
-			if which_task == 'Pred':
-				ht, hT, out = model(X)
-				loss = loss_function(out[:-1], X[1:])
+			for i, (_X, _y, token) in enumerate(zip(X, y, tokens)):
+				if which_task == 'Pred':
+					ht, hT, out = model(_X)
+					loss = loss_function(out[:-1], _X[1:])
 
-			elif which_task == 'Class':
-				y = y.to(model.device)
-				ht, hT, out = model(X)
-				loss = loss_function(out[-1], y)
-				labels = torch.argmax(y, dim=-1)
-				preds = torch.argmax(out[-1], dim=-1)
-				accuracy = preds.eq(labels).sum().item() / n
-				results['Accuracy'][whichset].append(accuracy)
+				elif which_task == 'Class':
+					_y = _y.to(model.device)
+					ht, hT, out = model(_X)
+					loss = loss_function(out[-1], _y)
+					labels = torch.argmax(_y, dim=-1)
+					preds = torch.argmax(out[-1], dim=-1)
+					accuracy = preds.eq(labels).sum().item()					
+					results['Accuracy'][whichset][token].append(accuracy)
 
-			results['Loss'][whichset].append(loss)
-			if epoch in epochs_snapshot:
-				results['yh'][whichset].append(ht.permute(1,0,2).detach().cpu().numpy())
+				results['Loss'][whichset][token].append(loss)
+				results['yh'][whichset][token].append(ht.detach().cpu().numpy())
 
+		# cued retrieval for testing prediction task
 		if which_task == 'Pred':
-			predicted_lists = cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L)	
-
-			results['Retrieval']['train'].append(predicted_lists[0])
-			results['Retrieval']['test'].append(predicted_lists[1])
-			results['Retrieval']['other'].append(predicted_lists[2])
-
-def cued_retrieval(alphabet, tokens_train, tokens_test, tokens_other, model, letter_to_index, index_to_letter, L):
-
-	alpha=len(alphabet)
-
-	pred_seq_train = np.zeros(np.shape(tokens_train)[0])
-	pred_seq_test = np.zeros(np.shape(tokens_test)[0])
-	pred_seq_other = np.zeros(np.shape(tokens_other)[0])
-
-	cues = np.append(np.repeat(tokens_train[:,0], 1), np.repeat(tokens_test[:,0], 1))
-
-	# cue each letter
-	for cue in cues:
-		pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue], L-1)
-
-		where=np.where((tokens_train == pred_seq).all(axis=1))
-		if where[0] != np.ndarray([]):
-			index=where[0][0]
-			pred_seq_train[index] +=1
-
-		where=np.where((tokens_test == pred_seq).all(axis=1))
-		if where[0] != np.ndarray([]):
-			index=where[0][0]
-			pred_seq_test[index] +=1
-
-		where=np.where((tokens_other == pred_seq).all(axis=1))
-		if where[0] != np.ndarray([]):
-			index=where[0][0]
-			pred_seq_other[index] +=1
-
-	return pred_seq_train, pred_seq_test, pred_seq_other
+			cues = np.append([k[0] for k in results['Loss']['train'].keys()], [k[0] for k in results['Loss']['test'].keys()])
+			alpha=len(alphabet)
+			# cue each letter
+			for cue in cues:
+				pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue], L-1)
+				pred_seq = ''.join(pred_seq)
+				if pred_seq in results['Retrieval']['train']:
+					# print('train')
+					results['Retrieval']['train'][pred_seq].append(1)
+				elif pred_seq in results['Retrieval']['test']:
+					# print('test')
+					results['Retrieval']['test'][pred_seq].append(1)
+				elif pred_seq in results['Retrieval']['other']:
+					# print('other')
+					results['Retrieval']['other'][pred_seq].append(1)
+				else:
+					print('Predicted sequence not in dictionary!')
+	return
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	with torch.no_grad():
