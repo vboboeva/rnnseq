@@ -15,7 +15,6 @@ from itertools import product
 # 			train network 				 #
 ##########################################
 
-
 def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task ):
 
 	# Common setup for loss functions
@@ -99,7 +98,7 @@ def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, 
 
 	with torch.no_grad():
 
-		results['Whh'].append(model.rnn.weight_hh_l0.detach().cpu().numpy())
+		# results['Whh'].append(model.rnn.weight_hh_l0.detach().cpu().numpy())
 		
 		for tokens, X, y, whichset, n in zip([tokens_train, tokens_test], [X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
 
@@ -109,16 +108,24 @@ def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, 
 			for i, (_X, _y, token) in enumerate(zip(X, y, tokens)):
 				if which_task == 'Pred':
 					ht, hT, out = model(_X)
+					print("=================")
+					print("which_task =", which_task,  " out.shape=", out.shape)
+					print("=================")
 					loss = loss_function(out[:-1], _X[1:])
 
 				elif which_task == 'Class':
 					_y = _y.to(model.device)
 					ht, hT, out = model(_X)
+					print("=================")
+					print("which_task =", which_task,  " out.shape=", out.shape)
+					print("=================")
 					loss = loss_function(out[-1], _y)
 					labels = torch.argmax(_y, dim=-1)
 					preds = torch.argmax(out[-1], dim=-1)
 					accuracy = preds.eq(labels).sum().item()					
 					results['Accuracy'][whichset][token].append(accuracy)
+
+				exit()
 
 				results['Loss'][whichset][token].append(loss)
 				results['yh'][whichset][token].append(ht.detach().cpu().numpy())
