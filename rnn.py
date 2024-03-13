@@ -19,6 +19,7 @@ from pylab import rcParams
 
 from train import train
 from model import RNN
+import pickle
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -118,24 +119,27 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	
 	# Save the model state
 	torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
-	
+
+	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
+	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 	# Save snapshots of connectivity across training 
-	np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
+	# np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
 
-	sub_results = {k: v for k, v in results.items() if k not in ['Whh']}
+	# sub_results = {k: v for k, v in results.items() if k not in ['Whh']}
 
-	for key in sub_results.keys():
-		nested_keys = [k for k in sub_results[key].keys()]
-		for nk in nested_keys:
-			if len(results[key][nk]) != 0:
-				if which_task == 'Class':
-					if key != 'Retrieval':
-						if nk != 'other':
-							print('entered if')
-							np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
-				elif which_task == 'Pred':
-					if key != 'Accuracy':
-							np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
+	# for key in sub_results.keys():
+	# 	nested_keys = [k for k in sub_results[key].keys()]
+	# 	for nk in nested_keys:
+	# 		if len(results[key][nk]) != 0:
+	# 			if which_task == 'Class':
+	# 				if key != 'Retrieval':
+	# 					if nk != 'other':
+	# 						print('entered if')
+	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
+	# 			elif which_task == 'Pred':
+	# 				if key != 'Accuracy':
+	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
 def quick_plot(results):
 	fig, ax = plt.subplots(1,2, figsize=(13,8))
@@ -249,7 +253,7 @@ def main(
 		return
 
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
-	# quick_plot(results)
+	quick_plot(results)
 
 	return model, results
 
@@ -268,13 +272,13 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 2000,
+		n_epochs = 200,
 		batch_size = 8,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
 		alpha = 5,
-		snap_freq = 100 # snapshot of net activity every snap_freq epochs
+		snap_freq = 10 # snapshot of net activity every snap_freq epochs
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
@@ -285,7 +289,7 @@ if __name__ == "__main__":
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
 
-	size = 1
+	size = 2
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
