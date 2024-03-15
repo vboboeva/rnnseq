@@ -101,8 +101,21 @@ import string
 
 #         # whole sequence of hidden states, linearly transformed
 #         y = self.fc(ht)
-#         y = F.softmax(self.fc(ht), dim=-1)
-        
+#         # print('y shape', y.shape)
+
+#         # when using NLLLoss instead of cross entropy
+#         # if self.training:
+#         #     y = F.log_softmax(y, dim=-1)
+#         # else:
+#         #     y = F.softmax(y, dim=-1)
+
+#         # when using cross entropy
+
+#         y = F.softmax(y, dim=-1)
+    
+#         # np.savetxt('hT_v.txt', hT[0].detach().numpy())
+#         # np.save('hT_v.npy', hT[0].detach().numpy())
+
 #         return ht, hT, y
 
 
@@ -130,7 +143,6 @@ class Net(nn.Module):
     '''
 
     def init_weights (self, scaling):
-        torch.manual_seed(1871)
 
         scaling_arr = scaling.split(",")
         assert len(scaling_arr) in [1, len(list(self.named_parameters()))], \
@@ -183,25 +195,21 @@ class Net(nn.Module):
     def __len__ (self):
         return len(self._modules.items())
 
-
-
 class RNN (Net):
 
     def __init__(self, d_input, d_hidden, num_layers, d_output, 
-            activation='relu',
-            output_activation = None, # for classification vs regression tasks
+            # activation='relu',
+            output_activation = 'softmax', # choose btw softmax for classification vs linear for regression tasks
             drop_l=None,
-            nonlinearity=F.tanh,
+            nonlinearity='relu',
             layer_type=nn.Linear,
             which_init='Const',
-            bias=False,
+            bias=True,
             device="cpu"
         ):
 
         super(RNN, self).__init__()
         scaling=which_init
-        if scaling is None:
-            scaling = "Const"
 
         self.device = device
         # Defining the number of layers and the nodes in each layer
@@ -209,19 +217,21 @@ class RNN (Net):
         self.d_output = d_output
         self.d_hidden = d_hidden
 
-        self.i2h = nn.Linear (d_input, d_hidden, bias=False)
+        self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
         self.h2h = layer_type (d_hidden, d_hidden, bias=bias)
         self.h2o = nn.Linear (d_hidden, d_output, bias=bias)
 
-        if activation in [None, 'linear']:
+        if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
-        elif activation == 'relu':
+        elif nonlinearity == 'relu':
             self.phi = lambda x: F.relu(x)
-        elif activation == 'sigmoid':
+        elif nonlinearity == 'sigmoid':
             self.phi = lambda x: F.sigmoid(x)
+        elif nonlinearity == 'tanh':
+            self.phi = lambda x: F.tanh(x)
         else:
             raise NotImplementedError("activation function " + \
-                            f"\"{activation}\" not implemented")
+                            f"\"{nonlinearity}\" not implemented")
 
         if output_activation in [None, 'linear']:
             self.out_phi = lambda x: x
@@ -238,7 +248,8 @@ class RNN (Net):
             drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
         drop_l = drop_l.split(",")
 
-        self.init_weights (scaling)
+        if scaling is not None:
+            self.init_weights (scaling)
 
 
     def init_weights(self, scaling, seed=None):
@@ -273,7 +284,7 @@ class RNN (Net):
                 pars.data.normal_(0., std)
 
     # def forward (self, x, h0):
-    def forward (self, x):
+    def forward(self, x):
         '''
         x
         ---
@@ -292,19 +303,44 @@ class RNN (Net):
         hidden = []
         # print(40*"==")
         # print("x.shape=", x.shape)
+
+        # t is the sequence of time-steps
         for t, xt in enumerate(x):
-            # print("xt.shape=", xt.shape)
-            z = self.i2h (xt);      # print("step 1, z.shape=", z.shape)
-            z = self.h2h (ht + z);  # print("step 2, z.shape=", z.shape)
-            z = self.phi (z);       # print("step 3, z.shape=", z.shape)
+            # PREVIOUS
+            # z = self.i2h (xt);      # print("step 1, z.shape=", z.shape)
+            # z = self.h2h (ht + z);  # print("step 2, z.shape=", z.shape)
+            # z = self.phi (z);       # print("step 3, z.shape=", z.shape)
+
+            # NEW
+            zx = self.i2h (xt);       # print("step 1, z.shape=", z.shape)
+            zh = self.h2h (ht);       # print("step 2, z.shape=", z.shape)
+            z = self.phi (zh + zx);   # print("step 3, z.shape=", z.shape)
+
             hidden.append(z)
             ht = z
 
         hidden = torch.reshape(torch.stack(hidden), _shape)
         y = self.h2o(hidden)
-        y = self.out_phi(y)
+        
+        # when using NLLLoss instead of cross entropy
+        # if self.training:
 
-        return hidden, hidden[-1].view(1,-1), y
+        #     y = F.log_softmax(y, dim=-1)
+        # else:
+        #     y = self.out_phi(y)
+
+        # when using cross entropy
+        y = F.softmax(y, dim=-1)
+
+        # np.savetxt('ht_alb.txt', hidden.detach().numpy())
+        # np.savetxt('hT_alb.txt', (hidden[-1]).detach().numpy())
+        # np.save('hT_alb.npy', (hidden[-1]).detach().numpy())
+        # np.savetxt('y_alb.txt', y.detach().numpy())
+        # exit()
+
+        hT = torch.reshape(hidden[-1], (1, *hidden.shape[1:]))
+
+        return hidden, hT, y
 
     def get_activity(self, x):
 

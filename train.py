@@ -10,22 +10,19 @@ from tqdm import tqdm
 import string
 from itertools import product
 
-
 ##########################################
 # 			train network 				 #
 ##########################################
 
 def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task ):
 
-	# Common setup for loss functions
-	if which_objective == 'CE':
-		loss_function = lambda output, target: F.cross_entropy(output, target, reduction="mean")
-
-	elif which_objective == 'MSE':
-		loss_function = lambda output, target: F.mse_loss(output, target, reduction="mean")
-	else:
-		print('Loss function not recognized!')
-		return
+	loss_functions = {
+		'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
+		# 'CE': lambda output, target: F.nll_loss(output, torch.argmax(target, dim=-1), reduction="mean"),
+		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
+	}
+	# Define loss functions
+	loss_function = loss_functions.get(which_objective)
 
 	# Adjust the loss function based on the task
 	if which_task == 'Pred':
@@ -46,6 +43,7 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 		if epoch in epochs_snapshot:
 			test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
 
+		model.train()
 		# shuffle training data
 		_ids = torch.randperm(n_train)
 
@@ -60,11 +58,27 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 
 			if which_task == 'Pred':
 				ht, hT, out_batch = model(X_batch)
+				# print("=================")
+				# print("which_task =", which_task,
+				# 		" out_batch.shape=", out_batch.shape,
+				# 		" ht.shape=", ht.shape,
+				# 		" hT.shape=", hT.shape,
+				# 	)
+				# print("=================")
+				# exit()
 				loss = loss_function(out_batch[:-1], X_batch[1:])
 			
 			elif which_task == 'Class':
 				y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 				ht, hT, out_batch = model(X_batch)
+				# print("=================")
+				# print("which_task =", which_task,
+				# 		" out_batch.shape=", out_batch.shape,
+				# 		" ht.shape=", ht.shape,
+				# 		" hT.shape=", hT.shape,
+				# 	)
+				# print("=================")
+				# exit()
 				loss = loss_function(out_batch[-1], y_batch)
 
 			loss.backward()
@@ -83,49 +97,55 @@ def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, 
 	tokens_test=results['Loss']['test'].keys()
 	tokens_other=results['Loss']['other'].keys()
 
-	# Define loss functions
 	loss_functions = {
 		'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
+		# 'CE': lambda output, target: F.nll_loss(output, torch.argmax(target, dim=-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	}
+	# Define loss functions
 	loss_function = loss_functions.get(which_objective)
-	if loss_function is None:
-		print('Loss function not recognized!')
-		return
 
 	n_train = X_train.shape[1] 
 	n_test = X_test.shape[1] 
 
+	model.eval()
 	with torch.no_grad():
 
 		# results['Whh'].append(model.rnn.weight_hh_l0.detach().cpu().numpy())
 		
 		for tokens, X, y, whichset, n in zip([tokens_train, tokens_test], [X_train, X_test], [y_train, y_test], ['train','test'], [n_train, n_test]):
-
 			X = X.permute((1,0,2))
 			X = X.to(model.device)
 
 			for i, (_X, _y, token) in enumerate(zip(X, y, tokens)):
 				if which_task == 'Pred':
 					ht, hT, out = model(_X)
-					print("=================")
-					print("which_task =", which_task,  " out.shape=", out.shape)
-					print("=================")
+					# print("=================")
+					# print("which_task =", which_task,
+					# 		" out.shape=", out.shape,
+					# 		" ht.shape=", ht.shape,
+					# 		" hT.shape=", hT.shape,
+					# 	)
+					# print("=================")
+					# exit()
 					loss = loss_function(out[:-1], _X[1:])
 
 				elif which_task == 'Class':
 					_y = _y.to(model.device)
 					ht, hT, out = model(_X)
-					print("=================")
-					print("which_task =", which_task,  " out.shape=", out.shape)
-					print("=================")
+					# print("=================")
+					# print("which_task =", which_task,
+					# 		" out.shape=", out.shape,
+					# 		" ht.shape=", ht.shape,
+					# 		" hT.shape=", hT.shape,
+					# 	)
+					# print("=================")
+					# exit()
 					loss = loss_function(out[-1], _y)
 					labels = torch.argmax(_y, dim=-1)
 					preds = torch.argmax(out[-1], dim=-1)
 					accuracy = preds.eq(labels).sum().item()					
 					results['Accuracy'][whichset][token].append(accuracy)
-
-				exit()
 
 				results['Loss'][whichset][token].append(loss)
 				results['yh'][whichset][token].append(ht.detach().cpu().numpy())

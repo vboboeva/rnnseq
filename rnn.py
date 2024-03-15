@@ -18,7 +18,6 @@ from matplotlib import rc
 from pylab import rcParams
 
 from train import train
-from model import RNN
 import pickle
 
 # take only training sequences and repeat some of them 
@@ -164,6 +163,9 @@ def quick_plot(results):
 ################## M A I N ################
 ###########################################
 
+from model import RNN
+# from model_v import RNN
+
 def main(
 	learning_rate, n_hidden, sim, sim_datasplit,
 	# network parameters
@@ -173,7 +175,7 @@ def main(
 	which_task=None,
 	which_objective='CE',
 	which_init=None,
-	which_transfer='tanh',
+	which_transfer='relu',
 	n_epochs=10,
 	batch_size=8,
 	frac_train=0.7,  # fraction of data to train net with
@@ -221,7 +223,7 @@ def main(
 
 	# Train and test network
 	torch.manual_seed(sim)
-	n_batches = len(tokens_train) // batch_size
+	n_batches = n_train // batch_size
 
 	# Dynamically determine the output size of the model
 	task_to_output_size = {
@@ -272,8 +274,8 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 200,
-		batch_size = 8,
+		n_epochs = 2000,
+		batch_size = 98,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1,
@@ -289,7 +291,7 @@ if __name__ == "__main__":
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
 
-	size = 2
+	size = 1
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
