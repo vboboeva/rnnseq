@@ -14,7 +14,7 @@ from itertools import product
 # 			train network 				 #
 ##########################################
 
-def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task ):
+def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task ):
 
 	loss_functions = {
 		'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
@@ -38,57 +38,54 @@ def train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L
 
 	n_train = X_train.shape[1]
 
-	for epoch in range(n_epochs):
+	model.train()
+	# shuffle training data
+	_ids = torch.randperm(n_train)
+
+
+	# training in batches
+	for batch in range(n_batches):
+
+		optimizer.zero_grad()
+		batch_start = batch * batch_size
+		batch_end = (batch + 1) * batch_size
+
+		X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
+
+		if which_task == 'Pred':
+			ht, hT, out_batch = model(X_batch)
+			# print("=================")
+			# print("which_task =", which_task,
+			# 		" out_batch.shape=", out_batch.shape,
+			# 		" ht.shape=", ht.shape,
+			# 		" hT.shape=", hT.shape,
+			# 	)
+			# print("=================")
+			# exit()
+			loss = loss_function(out_batch[:-1], X_batch[1:])
 		
-		if epoch in epochs_snapshot:
-			test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+		elif which_task == 'Class':
+			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
+			ht, hT, out_batch = model(X_batch)
+			# print(ht, hT, out_batch)
+			# print("=================")
+			# print("which_task =", which_task,
+			# 		" out_batch.shape=", out_batch.shape,
+			# 		" ht.shape=", ht.shape,
+			# 		" hT.shape=", hT.shape,
+			# 	)
+			# print("=================")
+			# exit()
+			loss = loss_function(out_batch[-1], y_batch)
 
-		model.train()
-		# shuffle training data
-		_ids = torch.randperm(n_train)
-
-		# training in batches
-		for batch in range(n_batches):
-
-			optimizer.zero_grad()
-			batch_start = batch * batch_size
-			batch_end = (batch + 1) * batch_size
-
-			X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
-
-			if which_task == 'Pred':
-				ht, hT, out_batch = model(X_batch)
-				# print("=================")
-				# print("which_task =", which_task,
-				# 		" out_batch.shape=", out_batch.shape,
-				# 		" ht.shape=", ht.shape,
-				# 		" hT.shape=", hT.shape,
-				# 	)
-				# print("=================")
-				# exit()
-				loss = loss_function(out_batch[:-1], X_batch[1:])
-			
-			elif which_task == 'Class':
-				y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-				ht, hT, out_batch = model(X_batch)
-				# print("=================")
-				# print("which_task =", which_task,
-				# 		" out_batch.shape=", out_batch.shape,
-				# 		" ht.shape=", ht.shape,
-				# 		" hT.shape=", hT.shape,
-				# 	)
-				# print("=================")
-				# exit()
-				loss = loss_function(out_batch[-1], y_batch)
-
-			loss.backward()
-			optimizer.step()
+		loss.backward()
+		optimizer.step()
 
 	return results
 
 ##########################################
 # 				test network 			 #
-##########################################	
+##########################################
 
 
 def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results):
@@ -146,6 +143,7 @@ def test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, 
 					preds = torch.argmax(out[-1], dim=-1)
 					accuracy = preds.eq(labels).sum().item()					
 					results['Accuracy'][whichset][token].append(accuracy)
+					# print(loss)
 
 				results['Loss'][whichset][token].append(loss)
 				results['yh'][whichset][token].append(ht.detach().cpu().numpy())

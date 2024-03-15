@@ -18,7 +18,9 @@ from matplotlib import rc
 from pylab import rcParams
 
 from train import train
+from train import test
 import pickle
+from model import RNN
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -87,7 +89,7 @@ def load_tokens(alpha, L, m, n_types, letter_to_index):
 		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
 
 	print('total number of tokens=', np.shape(all_tokens)[0])
-	return X, y, all_tokens, all_labels, np.shape(tokens)[0]
+	return X, y, all_tokens, np.shape(tokens)[0]
 
 def generate_configurations(L, alphabet):
 	configurations = list(product(alphabet, repeat=L))
@@ -102,7 +104,7 @@ def remove_subset(configurations, subset):
 def make_results_dict(tokens_train, tokens_test, tokens_other):
 	# Set up the dictionary that will contain results for each token
 	results = {}
-	for which_result in ['Loss', 'Retrieval', 'Accuracy', 'yh']:
+	for which_result in ['Loss', 'Accuracy', 'Retrieval','yh']:
 		results.update({which_result:{}}) 
 		for myset, label in (zip([tokens_train, tokens_test, tokens_other], ['train','test','other'])):
 			results[which_result].update({label:{}}) 
@@ -141,30 +143,34 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
 def quick_plot(results):
-	fig, ax = plt.subplots(1,2, figsize=(13,8))
+	print('Quick and dirty plot')
+	fig, ax = plt.subplots(2,2, figsize=(12,4))
+	for m, metric in enumerate(results.keys()):
+		if m<2:			
+			for s, sett in enumerate(results[metric].keys()):
+				if s<2:
+					mean=np.zeros(len(results[metric][sett][next(iter(results[metric][sett]))]))
 
-	# mean_acc=np.zeros(len(results['Accuracy']['train'][next(iter(results['Accuracy']['train']))]))
-	mean_loss=np.zeros(len(results['Loss']['train'][next(iter(results['Loss']['train']))]))
+					for t, tok in enumerate(results[metric][sett].keys()):
+						if m==0:
+							ax[m,s].plot(results[metric][sett][tok], label=tok)
+						else:
+							ax[m,s].plot(results[metric][sett][tok])
 
-	count=0
-	for tok in results['Accuracy']['train'].keys():
-		ax[0].plot(results['Loss']['train'][tok])
-		# ax[1].plot(results['Accuracy']['train'][tok])
-		
-		mean_loss+=results['Loss']['train'][tok]
-		# mean_acc+=results['Accuracy']['train'][tok]
-		count+=1
-	
-	ax[0].plot(mean_loss/count, color='black', lw=5)
-	# ax[1].plot(mean_acc/count, color='black', lw=5)
-	plt.show()
+						mean+=results[metric][sett][tok]
+					ax[m,s].set_xlabel('Time (in units of 20 epochs)')
+					ax[m,s].set_ylabel('%s'%metric)
+					ax[m,s].plot(mean/t, lw=3)
+					ax[m,s].set_title('%s'%sett)
+					if metric == 'Accuracy':
+						ax[m,s].axhline(1./7., ls='--')
+
+	fig.legend(ncol=9, bbox_to_anchor=(0.8, 0.0))
+	fig.savefig('loss.png', bbox_inches='tight')  
 
 ###########################################
 ################## M A I N ################
 ###########################################
-
-from model import RNN
-# from model_v import RNN
 
 def main(
 	learning_rate, n_hidden, sim, sim_datasplit,
@@ -191,7 +197,7 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
+	X, y, all_tokens, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
@@ -215,8 +221,9 @@ def main(
 
 	tokens_train = all_tokens[train_ids, :]
 	tokens_test = all_tokens[test_ids, :]
-	labels_train = all_labels[train_ids]
-	labels_test = all_labels[test_ids]
+
+	print(tokens_train)
+	print(tokens_test)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
@@ -224,6 +231,8 @@ def main(
 	# Train and test network
 	torch.manual_seed(sim)
 	n_batches = n_train // batch_size
+
+	# print('n_batches', n_batches)
 
 	# Dynamically determine the output size of the model
 	task_to_output_size = {
@@ -249,7 +258,13 @@ def main(
 
 	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
-		task_results = train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_epochs, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, epochs_snapshot, which_task=which_task)
+		for epoch in range(n_epochs):
+			if epoch in epochs_snapshot:
+				test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+
+			train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task=which_task)
+			# print(epoch)
+			# print(results['Loss']['train'])
 	else:
 		print("Task not recognized!")
 		return
@@ -274,13 +289,13 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 2000,
-		batch_size = 98,
+		n_epochs = 1000,
+		batch_size = 8,
 		frac_train = 0.7,
 		n_repeats = 1,
-		n_types = -1,
+		n_types = 2, # set minimum 2 for task to make sense
 		alpha = 5,
-		snap_freq = 10 # snapshot of net activity every snap_freq epochs
+		snap_freq = 20 # snapshot of net activity every snap_freq epochs
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
