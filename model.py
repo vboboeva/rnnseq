@@ -6,6 +6,7 @@ RNN network
 
 import numpy as np
 from numpy import loadtxt
+from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -103,32 +104,20 @@ class RNN(nn.Module):
 
         # whole sequence of hidden states, linearly transformed
         y = self.fc(ht)
-        # print('y', y)
-
-        # when using NLLLoss instead of cross entropy
-        # if self.training:
-        #     y = F.log_softmax(y, dim=-1)
-        # else:
-        #     y = F.softmax(y, dim=-1)
-
-        # print(np.shape(y))
-        # exit()
-
-        # when using cross entropy
-
-        if self.training == False:
-            beta=1
-            y = F.softmax(beta*y, dim=-1)
-
-        # beta=10
-        # y = F.softmax(beta*y, dim=-1)
-        # print('y', y)
 
         # np.savetxt('hT_v.txt', hT[0].detach().numpy())
         # np.save('hT_v.npy', hT[0].detach().numpy())
 
         return ht, hT, y
 
+    def save(self, filename):
+        torch.save(self.state_dict(), filename)
+
+    def load(self, filename):
+        self.load_state_dict(torch.load(filename, map_location=self.device))
+
+    def grad_dict (self):
+        return OrderedDict({name:pars.grad for name, pars in self.named_parameters()})
 
     def get_activity(self, x):
 

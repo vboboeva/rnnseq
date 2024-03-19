@@ -142,30 +142,45 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	# 				if key != 'Accuracy':
 	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
-def quick_plot(results):
+def quick_plot(n_types, results):
 	print('Quick and dirty plot')
-	fig, ax = plt.subplots(2,2, figsize=(12,4))
+	lstyles=['-', '--']
+
+	fig, ax = plt.subplots(2,2, figsize=(12,6))
 	for m, metric in enumerate(results.keys()):
 		if m<2:			
 			for s, sett in enumerate(results[metric].keys()):
 				if s<2:
+					print(40*'--', sett)
+					colors = plt.cm.viridis(np.linspace(0, 1, len(results[metric][sett].keys())))
 					mean=np.zeros(len(results[metric][sett][next(iter(results[metric][sett]))]))
+					max_value = max(max(results[metric][sett][tok]) for tok in results[metric][sett].keys())
 
 					for t, tok in enumerate(results[metric][sett].keys()):
-						if m==0:
-							ax[m,s].plot(results[metric][sett][tok], label=tok)
+
+						if metric=='Loss':
+							ax[m,s].plot(results[metric][sett][tok], label=tok, ls=lstyles[s], color=colors[t])
+							ax[m,s].set_ylim(0, max_value)
+
+							print(tok, np.array(results[metric][sett][tok])[-1])
 						else:
-							ax[m,s].plot(results[metric][sett][tok])
+							ax[m,s].plot(results[metric][sett][tok], ls=lstyles[s], color=colors[t])
 
 						mean+=results[metric][sett][tok]
+
 					ax[m,s].set_xlabel('Time (in units of 20 epochs)')
 					ax[m,s].set_ylabel('%s'%metric)
-					ax[m,s].plot(mean/t, lw=3)
+					ax[m,s].plot(mean/t, lw=3, ls=lstyles[s], color='black')
 					ax[m,s].set_title('%s'%sett)
 					if metric == 'Accuracy':
-						ax[m,s].axhline(1./7., ls='--')
+						ax[m,s].axhline(1./n_types, ls='--')
+					# if metric == 'Loss':
+					# 	ax[m,s].set_ylim(0,2)
 
-	fig.legend(ncol=9, bbox_to_anchor=(0.8, 0.0))
+					# if sett == 'train':
+					# 	ax[m,s].set_xlim(-2,6)
+	fig.tight_layout()
+	fig.legend(ncol=9, bbox_to_anchor=(0.9, 0.0))
 	fig.savefig('loss.png', bbox_inches='tight')  
 
 ###########################################
@@ -254,15 +269,29 @@ def main(
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
 	# Set up the results dictionary
-	results=make_results_dict(tokens_train, tokens_test, tokens_other)
+	results = make_results_dict(tokens_train, tokens_test, tokens_other)
+
+	def stats (x):
+		try:
+			_res = torch.mean(x), torch.std(x)
+		except:
+			_res = None
+		return _res
 
 	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
 		for epoch in range(n_epochs):
 			if epoch in epochs_snapshot:
-				test(X_train, X_test, y_train, y_test, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+				test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
 
-			train(X_train, X_test, y_train, y_test, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, results, which_task=which_task)
+				test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+
+				# for name, grad in model.grad_dict().items():
+				# 	print("\t", name, "\t", stats(grad))
+
+			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task)
+			# for name, grad in model.grad_dict().items():
+			# 	print("\t", name, "\t", stats(grad))
 			# print(epoch)
 			# print(results['Loss']['train'])
 	else:
@@ -270,7 +299,7 @@ def main(
 		return
 
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
-	quick_plot(results)
+	quick_plot(n_types, results)
 
 	return model, results
 
@@ -289,13 +318,13 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 1000,
-		batch_size = 8,
+		n_epochs = 20000,
+		batch_size = 7,
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = 2, # set minimum 2 for task to make sense
 		alpha = 5,
-		snap_freq = 20 # snapshot of net activity every snap_freq epochs
+		snap_freq = 200 # snapshot of net activity every snap_freq epochs
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
