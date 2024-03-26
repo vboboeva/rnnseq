@@ -14,13 +14,17 @@ import random
 import scipy
 from itertools import permutations
 from itertools import product
+from functools import partial
 from matplotlib import rc
 from pylab import rcParams
+import pickle
 
 from train import train
 from train import test
-import pickle
-from model import RNN
+from model import RNN, LinearWeightDropout
+from quick_plot import plot_weights
+from quick_plot import plot_loss
+import json
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -101,20 +105,25 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
-def make_results_dict(tokens_train, tokens_test, tokens_other):
+def make_results_dict(tokens_train, tokens_test, tokens_other, ablate):
+
 	# Set up the dictionary that will contain results for each token
 	results = {}
+
 	for which_result in ['Loss', 'Accuracy', 'Retrieval','yh']:
 		results.update({which_result:{}}) 
 		for myset, label in (zip([tokens_train, tokens_test, tokens_other], ['train','test','other'])):
 			results[which_result].update({label:{}}) 
-			for idx_token, token in enumerate(myset):
-				temp = ''.join(token)
-				results[which_result][label].update({temp:[]})
+			for idx_token, tok in enumerate(myset):
+				token = ''.join(tok)
+				results[which_result][label].update({token:{}})
+				results[which_result][label][token].update({0:[]})
+				if ablate == True: 
+					for unit_ablated in range(1, n_hidden+1):
+						results[which_result][label][token].update({unit_ablated:[]})
+	results['Whh']=[]
 
-	results.update({'Whh':[]})
 	return results
-
 
 def savefiles(output_folder_name, sim, which_task, model, results):
 	
@@ -123,6 +132,12 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 
 	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
 	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+	# # Convert and write JSON object to file
+	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:
+	# 	_dumps = json.dumps(results)
+	# 	json.dump(_dumps, handle)
+
 
 	# Save snapshots of connectivity across training 
 	# np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
@@ -141,47 +156,6 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	# 			elif which_task == 'Pred':
 	# 				if key != 'Accuracy':
 	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
-
-def quick_plot(n_types, results):
-	print('Quick and dirty plot')
-	lstyles=['-', '--']
-
-	fig, ax = plt.subplots(2,2, figsize=(12,6))
-	for m, metric in enumerate(results.keys()):
-		if m<2:			
-			for s, sett in enumerate(results[metric].keys()):
-				if s<2:
-					print(40*'--', sett)
-					colors = plt.cm.viridis(np.linspace(0, 1, len(results[metric][sett].keys())))
-					mean=np.zeros(len(results[metric][sett][next(iter(results[metric][sett]))]))
-					max_value = max(max(results[metric][sett][tok]) for tok in results[metric][sett].keys())
-
-					for t, tok in enumerate(results[metric][sett].keys()):
-
-						if metric=='Loss':
-							ax[m,s].plot(results[metric][sett][tok], label=tok, ls=lstyles[s], color=colors[t])
-							ax[m,s].set_ylim(0, max_value)
-
-							print(tok, np.array(results[metric][sett][tok])[-1])
-						else:
-							ax[m,s].plot(results[metric][sett][tok], ls=lstyles[s], color=colors[t])
-
-						mean+=results[metric][sett][tok]
-
-					ax[m,s].set_xlabel('Time (in units of 20 epochs)')
-					ax[m,s].set_ylabel('%s'%metric)
-					ax[m,s].plot(mean/t, lw=3, ls=lstyles[s], color='black')
-					ax[m,s].set_title('%s'%sett)
-					if metric == 'Accuracy':
-						ax[m,s].axhline(1./n_types, ls='--')
-					# if metric == 'Loss':
-					# 	ax[m,s].set_ylim(0,2)
-
-					# if sett == 'train':
-					# 	ax[m,s].set_xlim(-2,6)
-	fig.tight_layout()
-	fig.legend(ncol=9, bbox_to_anchor=(0.9, 0.0))
-	fig.savefig('loss.png', bbox_inches='tight')  
 
 ###########################################
 ################## M A I N ################
@@ -202,8 +176,11 @@ def main(
 	frac_train=0.7,  # fraction of data to train net with
 	n_repeats=1,  # max number of repeats of a given sequence
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
-	alpha=5,  # length of alphabet
-	snap_freq=2
+	alpha=4,  # length of alphabet
+	snap_freq=2,
+	drop_connect = 0.,
+	weight_decay = 0.,
+	ablate=True
 ):
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
@@ -237,9 +214,6 @@ def main(
 	tokens_train = all_tokens[train_ids, :]
 	tokens_test = all_tokens[test_ids, :]
 
-	print(tokens_train)
-	print(tokens_test)
-
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
 
@@ -262,16 +236,23 @@ def main(
 	# n_epochs for which take a snapshot of neural activity
 	epochs_snapshot = [snap_freq*i for i in range(0, int(n_epochs/snap_freq)+1)]
 
+	if drop_connect != 0.:
+		layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
+	else:
+		layer_type = nn.Linear
+
 	# Create the model
-	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init)
+	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init, layer_type=layer_type)
+	print(model)
+	print(n_hidden)
 
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
 	# Set up the results dictionary
-	results = make_results_dict(tokens_train, tokens_test, tokens_other)
+	results = make_results_dict(tokens_train, tokens_test, tokens_other, ablate)
 
-	def stats (x):
+	def stats(x):
 		try:
 			_res = torch.mean(x), torch.std(x)
 		except:
@@ -280,16 +261,26 @@ def main(
 
 	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
-		for epoch in range(n_epochs):
+		for epoch in range(n_epochs+1):
 			if epoch in epochs_snapshot:
-				test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+				# COPY THE WEIGHTS WHEN YOU SAVE THEM
+				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results)
+				test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, None, n_hidden)
 
-				# for name, grad in model.grad_dict().items():
-				# 	print("\t", name, "\t", stats(grad))
+				test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, None, n_hidden)
 
-			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task)
+				if ablate == True:
+					# ablate units one by one
+					for idx_ablate in range(n_hidden):
+						# print('n_hidden')
+						# print(n_hidden)
+						print('ablating unit', idx_ablate)
+						test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, idx_ablate, n_hidden)
+
+						test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, idx_ablate, n_hidden)
+
+			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 			# for name, grad in model.grad_dict().items():
 			# 	print("\t", name, "\t", stats(grad))
 			# print(epoch)
@@ -299,7 +290,8 @@ def main(
 		return
 
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
-	quick_plot(n_types, results)
+	plot_weights(results, 5)
+	plot_loss(n_types, n_hidden, ablate, results)
 
 	return model, results
 
@@ -316,15 +308,18 @@ if __name__ == "__main__":
 		m = 2,
 		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
-		which_init = None,
+		which_init = 'Const',
 		which_transfer='relu',
-		n_epochs = 20000,
-		batch_size = 7,
+		n_epochs = 10000,
+		batch_size = 4, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = 2, # set minimum 2 for task to make sense
-		alpha = 5,
-		snap_freq = 200 # snapshot of net activity every snap_freq epochs
+		alpha = 4,
+		snap_freq = 200, # snapshot of net activity every snap_freq epochs
+		drop_connect = 0.,
+		# weight_decay = 0.2, # weight of L1 regularisation
+		ablate = True
 	)
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
@@ -341,11 +336,12 @@ if __name__ == "__main__":
 		learning_rate = params[row_index, lr_col_index]
 		
 		n_hidden = int(params[row_index, n_hidden_col_index])
+		print(n_hidden)
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s' % (
-		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit)
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_ablate%s' % (
+		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['ablate'])
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
