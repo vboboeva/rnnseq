@@ -76,10 +76,9 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, idx_ablate=None, n_hidden=10
+def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden=10
 	):
 
-	# print(idx_ablate)
 
 	loss_functions = {
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
@@ -92,35 +91,28 @@ def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_l
 	model.eval()
 	with torch.no_grad():
 
-		X = X.permute((1,0,2))
 		X = X.to(model.device)
 
-		if idx_ablate is None:
+		if ablate is False:
 			mask = torch.ones(n_hidden)
-			idx_masked_unit = 0
 		else:
 			mask = torch.ones(n_hidden)
-			mask[idx_ablate] = 0
-			idx_masked_unit = idx_ablate+1
+			if idx_ablate == 0:
+				pass
+			else:
+				mask[idx_ablate-1] = 0
+		
+		if which_task == 'Pred':
+			ht, hT, out = model.forward(X, mask=mask)
+			loss = loss_function(out[:-1], X[1:])
 
-		# print(mask)
-		for (_X, _y, token) in zip(X, y, tokens):
-			token = ''.join(token)
-			if which_task == 'Pred':
-				ht, hT, out = model.forward(_X, mask=mask)
-				loss = loss_function(out[:-1], _X[1:])
-
-			elif which_task == 'Class':
-				_y = _y.to(model.device)
-				ht, hT, out = model.forward(_X, mask=mask)
-				loss = loss_function(out[-1], _y)
-				labels = torch.argmax(_y, dim=-1)
-				preds = torch.argmax(out[-1], dim=-1)
-				accuracy = preds.eq(labels).sum().item(	)
-				results['Accuracy'][whichset][token][idx_masked_unit].append(accuracy)
-
-			results['Loss'][whichset][token][idx_masked_unit].append(loss.item())
-			results['yh'][whichset][token][idx_masked_unit].append(ht.detach().cpu().numpy())
+		elif which_task == 'Class':
+			y = y.to(model.device)
+			ht, hT, out = model.forward(X, mask=mask)
+			loss = loss_function(out[-1], y)
+			labels = torch.argmax(y, dim=-1)
+			preds = torch.argmax(out[-1], dim=-1)
+			accuracy = preds.eq(labels).sum().item(	)
 
 		# cued retrieval for testing prediction task
 		if which_task == 'Pred':
@@ -141,7 +133,8 @@ def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_l
 					results['Retrieval']['other'][pred_seq].append(1)
 				else:
 					print('Predicted sequence not in dictionary!')
-	return
+
+	return accuracy, loss.item(), ht.detach().cpu().numpy()
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	with torch.no_grad():

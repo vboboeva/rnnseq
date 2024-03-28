@@ -261,30 +261,60 @@ def main(
 
 	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
-		for epoch in range(n_epochs+1):
+		for epoch in range(n_epochs + 1):
 			if epoch in epochs_snapshot:
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, None, n_hidden)
+				for (whichset, X, y, tokens) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 
-				test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, None, n_hidden)
+					X = X.permute((1,0,2))
+					# print('X.shape', X.shape)					
+					if ablate == False:
+						range_ablate=1
+					else:
+						range_ablate=n_hidden+1
 
-				if ablate == True:
 					# ablate units one by one
-					for idx_ablate in range(n_hidden):
-						# print('n_hidden')
-						# print(n_hidden)
-						print('ablating unit', idx_ablate)
-						test(X_train, y_train, tokens_train, 'train' , model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, idx_ablate, n_hidden)
+					for idx_ablate in range(range_ablate):
 
-						test(X_test, y_test, tokens_test, 'test', model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, results, idx_ablate, n_hidden)
+						for (_X, _y, token) in zip(X, y, tokens):
+							token = ''.join(token)
+							accuracy, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+						
+							results['Accuracy'][whichset][token][idx_ablate].append(accuracy)
+							results['Loss'][whichset][token][idx_ablate].append(loss)
+							results['yh'][whichset][token][idx_ablate].append(yh)
+							# print(loss)
 
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
-			# for name, grad in model.grad_dict().items():
-			# 	print("\t", name, "\t", stats(grad))
-			# print(epoch)
-			# print(results['Loss']['train'])
+
+		# print(results)
+		# After traning: looking for motifs
+		# print(tokens_train)
+		# print(tokens_train.shape)
+		# print(X_train.shape)
+		# print(y_train.shape)
+
+		# mydict = {}
+
+		# # Identify all sequences with letter in a given position
+		# for letter in alphabet:
+		# 	mydict.update({letter:{}})
+		# 	for position in range(L):
+		# 		mydict[letter].update({position:{}})
+		# 		# print(mydict[letter][position])
+		# 		where = np.where(tokens_train[:, position] == letter)
+		# 		print(where)
+		# 		# without ablation evaluate classification accuracy on this set of sequences
+		# 		# print(tokens_train[where])
+		# 		# print(X_train[:,where,:])
+		# 		# print(y_train[where,:])
+				
+
+		# print(mydict)
+		# exit()
+
 	else:
 		print("Task not recognized!")
 		return
@@ -310,7 +340,7 @@ if __name__ == "__main__":
 		which_objective = 'CE',
 		which_init = 'Const',
 		which_transfer='relu',
-		n_epochs = 10000,
+		n_epochs = 1000,
 		batch_size = 4, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
