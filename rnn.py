@@ -24,6 +24,7 @@ from train import test
 from model import RNN, LinearWeightDropout
 from quick_plot import plot_weights
 from quick_plot import plot_loss
+from quick_plot import plot_accuracy_ablation
 import json
 
 # take only training sequences and repeat some of them 
@@ -268,8 +269,9 @@ def main(
 
 				for (whichset, X, y, tokens) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 
-					X = X.permute((1,0,2))
 					# print('X.shape', X.shape)					
+					X = X.permute((1,0,2))
+
 					if ablate == False:
 						range_ablate=1
 					else:
@@ -289,32 +291,48 @@ def main(
 
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 
-		# print(results)
-		# After traning: looking for motifs
-		# print(tokens_train)
-		# print(tokens_train.shape)
-		# print(X_train.shape)
-		# print(y_train.shape)
+		#After training: looking for motifs
 
-		# mydict = {}
-
-		# # Identify all sequences with letter in a given position
-		# for letter in alphabet:
-		# 	mydict.update({letter:{}})
-		# 	for position in range(L):
-		# 		mydict[letter].update({position:{}})
-		# 		# print(mydict[letter][position])
-		# 		where = np.where(tokens_train[:, position] == letter)
-		# 		print(where)
-		# 		# without ablation evaluate classification accuracy on this set of sequences
-		# 		# print(tokens_train[where])
-		# 		# print(X_train[:,where,:])
-		# 		# print(y_train[where,:])
+		# HYPOTHESIS 1
+		mydict = {}
+		# Identify all sequences with letter in a given position
+		for letter in alphabet:
+			mydict.update({letter:{}})
+			# print('letter', letter)
+			for position in range(L):
+				# print('position', position)
+				mydict[letter].update({position:{}})
+				where = np.where(tokens_train[:, position] == letter)
 				
+				X = X_train.permute((1,0,2))
+				y = y_train
+				tokens = tokens_train
 
-		# print(mydict)
-		# exit()
+				X = X[where]
+				y = y[where]
+				tokens = tokens_train[where]
+				# print('tokens', tokens)
 
+				mydict[letter][position].update({'Loss':[]})
+				mydict[letter][position].update({'Accuracy':[]})
+				# ablate units one by one, the zeroth element is with no ablation
+
+				for idx_ablate in range(n_hidden+1):
+
+					# print('ablating unit %s'%idx_ablate)
+					accuracy_mean=0
+					loss_mean=0
+					# Without and without ablation evaluate classification accuracy on this set of sequences
+					for (_X, _y, _token) in zip(X, y, tokens):
+						accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+						accuracy_mean=accuracy_mean+accuracy
+						loss_mean=loss_mean+loss
+					accuracy_mean=accuracy_mean/np.shape(tokens)[0]
+					loss_mean=loss_mean/np.shape(tokens)[0]
+					# print(accuracy_mean)
+
+					mydict[letter][position]['Loss'].append(loss_mean)
+					mydict[letter][position]['Accuracy'].append(accuracy_mean)					
 	else:
 		print("Task not recognized!")
 		return
@@ -322,6 +340,7 @@ def main(
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
 	plot_weights(results, 5)
 	plot_loss(n_types, n_hidden, ablate, results)
+	plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
 
 	return model, results
 
