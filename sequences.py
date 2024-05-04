@@ -118,14 +118,14 @@ if __name__ == "__main__":
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 3
+    L = 4
     # Number of elements
     whichm = 2
     # Length of alphabet used
-    alpha = 4
+    alpha = 5
     alphabet = list(string.ascii_lowercase)[:alpha]
-    # print(alphabet)
-    # np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
+    print(alphabet)
+    np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
 
 
     types=findStructures(alphabet, L, whichm)
@@ -157,4 +157,4 @@ if __name__ == "__main__":
             
         # print(type_)
         print(possibilities)
-        # np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
+        np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')

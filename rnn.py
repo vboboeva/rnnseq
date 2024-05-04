@@ -173,11 +173,11 @@ def main(
 	which_init=None,
 	which_transfer='relu',
 	n_epochs=10,
-	batch_size=8,
+	batch_size=7,
 	frac_train=0.7,  # fraction of data to train net with
 	n_repeats=1,  # max number of repeats of a given sequence
 	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
-	alpha=4,  # length of alphabet
+	alpha=5,  # length of alphabet
 	snap_freq=2,
 	drop_connect = 0.,
 	weight_decay = 0.,
@@ -196,6 +196,9 @@ def main(
 	n_train = int(frac_train * len(all_tokens))
 	n_test = len(all_tokens) - n_train
 	n_other = alpha ** L - n_train - n_test
+
+	print('number of train', n_train)
+	print('number of test', n_test)
 
 	torch.manual_seed(sim_datasplit)
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
@@ -263,14 +266,17 @@ def main(
 	print('TRAINING NETWORK')
 	if which_task in ['Pred', 'Class']:
 		for epoch in range(n_epochs + 1):
+			# print("X_train.shape (before) ", X_train.shape)
 			if epoch in epochs_snapshot:
+				print(epoch)
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				for (whichset, X, y, tokens) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 
-					# print('X.shape', X.shape)					
+					# print("X before ", X.shape)
 					X = X.permute((1,0,2))
+					# print("X after ", X.shape)
 
 					if ablate == False:
 						range_ablate=1
@@ -282,65 +288,68 @@ def main(
 
 						for (_X, _y, token) in zip(X, y, tokens):
 							token = ''.join(token)
-							accuracy, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+							accuracy, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+								idx_ablate=idx_ablate, n_hidden=n_hidden)
 						
 							results['Accuracy'][whichset][token][idx_ablate].append(accuracy)
 							results['Loss'][whichset][token][idx_ablate].append(loss)
 							results['yh'][whichset][token][idx_ablate].append(yh)
-							# print(loss)
+				
+			# print("X_train.shape (after) ", X_train.shape)
+			# exit()
 
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 
-		#After training: looking for motifs
+		# #After training: looking for motifs
 
-		# HYPOTHESIS 1
-		mydict = {}
-		# Identify all sequences with letter in a given position
-		for letter in alphabet:
-			mydict.update({letter:{}})
-			# print('letter', letter)
-			for position in range(L):
-				# print('position', position)
-				mydict[letter].update({position:{}})
-				where = np.where(tokens_train[:, position] == letter)
+		# # HYPOTHESIS 1
+		# mydict = {}
+		# # Identify all sequences with letter in a given position
+		# for letter in alphabet:
+		# 	mydict.update({letter:{}})
+		# 	# print('letter', letter)
+		# 	for position in range(L):
+		# 		# print('position', position)
+		# 		mydict[letter].update({position:{}})
+		# 		where = np.where(tokens_train[:, position] == letter)
 				
-				X = X_train.permute((1,0,2))
-				y = y_train
-				tokens = tokens_train
+		# 		X = X_train.permute((1,0,2))
+		# 		y = y_train
+		# 		tokens = tokens_train
 
-				X = X[where]
-				y = y[where]
-				tokens = tokens_train[where]
-				# print('tokens', tokens)
+		# 		X = X[where]
+		# 		y = y[where]
+		# 		tokens = tokens_train[where]
+		# 		# print('tokens', tokens)
 
-				mydict[letter][position].update({'Loss':[]})
-				mydict[letter][position].update({'Accuracy':[]})
-				# ablate units one by one, the zeroth element is with no ablation
+		# 		mydict[letter][position].update({'Loss':[]})
+		# 		mydict[letter][position].update({'Accuracy':[]})
+		# 		# ablate units one by one, the zeroth element is with no ablation
 
-				for idx_ablate in range(n_hidden+1):
+		# 		for idx_ablate in range(n_hidden+1):
 
-					# print('ablating unit %s'%idx_ablate)
-					accuracy_mean=0
-					loss_mean=0
-					# Without and without ablation evaluate classification accuracy on this set of sequences
-					for (_X, _y, _token) in zip(X, y, tokens):
-						accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
-						accuracy_mean=accuracy_mean+accuracy
-						loss_mean=loss_mean+loss
-					accuracy_mean=accuracy_mean/np.shape(tokens)[0]
-					loss_mean=loss_mean/np.shape(tokens)[0]
-					# print(accuracy_mean)
+		# 			# print('ablating unit %s'%idx_ablate)
+		# 			accuracy_mean=0
+		# 			loss_mean=0
+		# 			# Without and without ablation evaluate classification accuracy on this set of sequences
+		# 			for (_X, _y, _token) in zip(X, y, tokens):
+		# 				accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+		# 				accuracy_mean=accuracy_mean+accuracy
+		# 				loss_mean=loss_mean+loss
+		# 			accuracy_mean=accuracy_mean/np.shape(tokens)[0]
+		# 			loss_mean=loss_mean/np.shape(tokens)[0]
+		# 			# print(accuracy_mean)
 
-					mydict[letter][position]['Loss'].append(loss_mean)
-					mydict[letter][position]['Accuracy'].append(accuracy_mean)					
+		# 			mydict[letter][position]['Loss'].append(loss_mean)
+		# 			mydict[letter][position]['Accuracy'].append(accuracy_mean)					
 	else:
 		print("Task not recognized!")
 		return
 
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
-	plot_weights(results, 5)
+	# plot_weights(results, 5)
 	plot_loss(n_types, n_hidden, ablate, results)
-	plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
+	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
 
 	return model, results
 
@@ -348,7 +357,10 @@ def main(
 
 if __name__ == "__main__":
 
-	params = loadtxt("params_test.txt")
+	_L=4
+	_m=2
+	params = loadtxt('params_L%d_m%d.txt'%(_L,_m))
+	# params = loadtxt("params_test.txt")
 
 	main_kwargs = dict(
 		# network parameters
@@ -357,19 +369,22 @@ if __name__ == "__main__":
 		m = 2,
 		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
-		which_init = 'Const',
-		which_transfer='relu',
-		n_epochs = 1000,
-		batch_size = 4, #16, # GD if = size(training set), SGD if = 1
+		which_init = None,
+		which_transfer='tanh',
+		n_epochs = 5000,
+		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
-		n_types = 2, # set minimum 2 for task to make sense
-		alpha = 4,
+		n_types = -1, # set minimum 2 for task to make sense
+		alpha = 5,
 		snap_freq = 200, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
-		ablate = True
+		ablate = False
 	)
+
+
+
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
 
@@ -379,13 +394,14 @@ if __name__ == "__main__":
 	sim_col_index = 3        
 	index = int(sys.argv[1]) - 1
 
-	size = 1
+	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
+
+	size = 20
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
 		
 		n_hidden = int(params[row_index, n_hidden_col_index])
-		print(n_hidden)
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 

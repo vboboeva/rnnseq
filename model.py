@@ -175,6 +175,8 @@ class Net(nn.Module):
 
             if "weight" in name:
                 f_in = 1.*pars.data.size()[1]
+                print('f_in', f_in)
+                exit()
                 if scaling == "lin":
                     # initialisation of the weights -- N(0, 1/n)
                     init_f = lambda f_in: (0., 1./f_in)
@@ -220,9 +222,10 @@ class RNN (Net):
             drop_l=None,
             nonlinearity='relu',
             layer_type=nn.Linear,
-            which_init='Const',
+            which_init=None,
             bias=True,
-            device="cpu"
+            device="cpu",
+            train_i2h = True,
         ):
 
         super(RNN, self).__init__()
@@ -234,18 +237,21 @@ class RNN (Net):
         self.d_output = d_output
         self.d_hidden = d_hidden
 
-        # self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
+        if train_i2h:
+            self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
 
-        # MANUALLY DEFINE INPUT WEIGHTS HERE
-        self._input_weights = torch.cat([torch.eye(self.d_input), torch.zeros(self.d_hidden - self.d_input, self.d_input)]) 
+        else:
+            # MANUALLY DEFINE INPUT WEIGHTS HERE
+            self._input_weights = torch.cat([torch.eye(self.d_input), torch.zeros(self.d_hidden - self.d_input, self.d_input)]) 
 
-        # _n_repeats = self.d_hidden // self.d_input
-        # assert self.d_hidden % self.d_input == 0, \
-        #     "Hidden layer size should be integer multiple of input size"
-        # self._input_weights = torch.repeat_interleave(_input_weights, _n_repeats, dim=0)
-        
+            # _n_repeats = self.d_hidden // self.d_input
+            # assert self.d_hidden % self.d_input == 0, \
+            #     "Hidden layer size should be integer multiple of input size"
+            # self._input_weights = torch.repeat_interleave(_input_weights, _n_repeats, dim=0)
+            
+            self._input_weights.requires_grad = False
 
-        self._input_weights.requires_grad = False
+            self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
         self.h2h = layer_type (d_hidden, d_hidden, bias=bias)
         self.h2o = nn.Linear (d_hidden, d_output, bias=bias)
@@ -322,15 +328,26 @@ class RNN (Net):
         or
         seq_length, input_num_units
         '''
+
+        # print("x.shape (input) ", x.shape)
+        # print("mask.shape ", mask.shape)
+
+
         if mask is not None:
             assert isinstance(mask, torch.Tensor) and mask.shape == (self.d_hidden,), \
                 f"`mask` must be a 1D torch tensor with the same size as the hidden layer"
             mask = mask.to(self.device)
-            _masking = lambda x: x * mask[None,:]
+            _masking = lambda h: h * mask[None,:]
         else:
-            _masking = lambda x: x
+            _masking = lambda h: h
 
+        # _shape = seq_length, batch_size, n_hidden
+        # or 
+        # _shape = seq_length, n_hidden
+        # This is saved here to remove the batch dimension
+        # after the processing, if it is not present in input
         _shape = *x.shape[:-1], self.d_hidden
+        # print("_shape ", _shape)
 
         # If batch dimension missing, add it (in the middle -- as in the
         # default implementation of pytorch RNN module).
@@ -338,18 +355,24 @@ class RNN (Net):
         # in the same way as a single sequence.
         if len(x.shape) == 2:
             x = torch.reshape(x, (x.shape[0], 1, x.shape[1]) )
+        # print("x.shape (reshaped) ", x.shape)
         
+        # batch_size, n_hidden
         ht = _masking( torch.zeros(x.shape[1], self.d_hidden) )
         hidden = []
         
         # t is the sequence of time-steps
         for t, xt in enumerate(x):
-            # process input to feed into recurrent network            
-            zx = torch.matmul(xt, self._input_weights.T)
-            # zx = self.i2h (xt)
+
+            # xt = batch_size, n_input
+            # _input_weights = n_hidden, n_input
+            # zt = batch_size, n_hidden
+
+            # process input to feed into recurrent network
+            zi = self.i2h (xt)
 
             zh = self.h2h (ht)
-            z = self.phi (zh + zx)
+            z = self.phi (zh + zi)
             z = _masking( z )
 
             hidden.append(z)

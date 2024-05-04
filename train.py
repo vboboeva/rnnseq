@@ -76,7 +76,9 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden=10
+def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+	n_hidden=10,
+	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	):
 
 
@@ -93,14 +95,9 @@ def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_l
 
 		X = X.to(model.device)
 
-		if ablate is False:
-			mask = torch.ones(n_hidden)
-		else:
-			mask = torch.ones(n_hidden)
-			if idx_ablate == 0:
-				pass
-			else:
-				mask[idx_ablate-1] = 0
+		mask = torch.ones(n_hidden)
+		if idx_ablate != 0:
+			mask[idx_ablate-1] = 0
 		
 		if which_task == 'Pred':
 			ht, hT, out = model.forward(X, mask=mask)
@@ -148,7 +145,6 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
 				x[k,:] = F.one_hot(torch.tensor(p), alpha)
 			# y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
 			# x has to have dimensions (L, sizetrain, alpha)
-
 			_, _, y_pred = model.forward(x)#.permute(1,0,2)
 
 			# last_letter_logits has dimension alpha
