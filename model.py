@@ -353,14 +353,20 @@ class RNN (Net):
         # default implementation of pytorch RNN module).
         # This allows to treat an input containing a batch of sequences
         # in the same way as a single sequence.
+        # print(x.shape)
         if len(x.shape) == 2:
             x = torch.reshape(x, (x.shape[0], 1, x.shape[1]) )
         # print("x.shape (reshaped) ", x.shape)
+
+        # initialization of net        
+        # h0 = torch.randn(x.shape[1], self.d_hidden)
+        h0 = torch.zeros(x.shape[1], self.d_hidden)
         
         # batch_size, n_hidden
-        ht = _masking( torch.zeros(x.shape[1], self.d_hidden) )
+        ht = _masking(h0)
         hidden = []
         
+
         # t is the sequence of time-steps
         for t, xt in enumerate(x):
 
@@ -376,11 +382,13 @@ class RNN (Net):
             z = _masking( z )
 
             hidden.append(z)
-            ht = z
+            ht = z 
+
 
         hidden = torch.reshape(torch.stack(hidden), _shape)
+
         y = self.h2o(hidden)
-        
+
         hT = torch.reshape(hidden[-1], (1, *hidden.shape[1:]))
 
         return hidden, hT, y

@@ -268,7 +268,7 @@ def main(
 		for epoch in range(n_epochs + 1):
 			# print("X_train.shape (before) ", X_train.shape)
 			if epoch in epochs_snapshot:
-				print(epoch)
+				# print(epoch)
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
@@ -370,14 +370,14 @@ if __name__ == "__main__":
 		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
 		which_init = None,
-		which_transfer='tanh',
+		which_transfer='relu',
 		n_epochs = 5000,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
 		n_types = -1, # set minimum 2 for task to make sense
 		alpha = 5,
-		snap_freq = 200, # snapshot of net activity every snap_freq epochs
+		snap_freq = 20, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False

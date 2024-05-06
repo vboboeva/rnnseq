@@ -17,8 +17,9 @@ from itertools import product
 def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task, weight_decay=0.):
 
 	loss_functions = {
+		# 'CE': lambda output, target: F.cross_entropy(output, torch.argmax(target, dim=-1), reduction="mean"),
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=0), torch.argmax(target, dim=-1), reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	}
 	# Define loss functions
@@ -50,6 +51,8 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 		batch_end = (batch + 1) * batch_size
 
 		X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
+		# print(X_batch.shape)
+		# exit()
 
 		if which_task == 'Pred':
 			ht, hT, out_batch = model.forward(X_batch)
@@ -58,8 +61,16 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 		elif which_task == 'Class':
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 			ht, hT, out_batch = model.forward(X_batch)
-			# print(ht, hT, out_batch)
 			loss = loss_function(out_batch[-1], y_batch)
+			# print(ht, hT, out_batch)
+			# print('out_batch[-1]=',out_batch[-1].shape)
+			# print('\t', out_batch[-1])
+			# print('ybatch=',y_batch.shape)
+			# print('\t', y_batch)
+			# print('class=', torch.argmax(y_batch, dim=-1).shape)
+			# print('\t', torch.argmax(y_batch, dim=-1))
+			# print('loss=',loss)
+			# exit()
 
 		# # adding L1 regularization to the loss
 		# if weight_decay > 0.:
