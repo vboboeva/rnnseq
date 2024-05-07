@@ -10,32 +10,28 @@ from tqdm import tqdm
 import string
 from itertools import product
 
+
+loss_functions = {
+	'Pred': {
+		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).view(-1, output.shape[-1]), torch.argmax(target,dim=-1).view(-1), reduction="mean"),
+		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
+	},
+	'Class': {
+		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
+		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
+	}
+}
+
 ##########################################
 # 			train network 				 #
 ##########################################
 
 def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task, weight_decay=0.):
 
-	loss_functions = {
-		# 'CE': lambda output, target: F.cross_entropy(output, torch.argmax(target, dim=-1), reduction="mean"),
-		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
-		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
-	}
 	# Define loss functions
-	loss_function = loss_functions.get(which_objective)
-
-	# Adjust the loss function based on the task
-	if which_task == 'Pred':
-		# Adjust the output and target tensor dimensions for prediction task
-		adjusted_loss_function = lambda output, target: loss_function(output.permute(1, 2, 0), target.permute(1, 2, 0))
-	
-	elif which_task == 'Class':
-		# Use the loss function as is for classification task
-		adjusted_loss_function = loss_function
-	else:
-		print('Task not recognized!')
-		return
+	loss_function = loss_functions[which_task][which_objective]
 
 	n_train = X_train.shape[1]
 
@@ -62,15 +58,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 			ht, hT, out_batch = model.forward(X_batch)
 			loss = loss_function(out_batch[-1], y_batch)
-			# print(ht, hT, out_batch)
-			# print('out_batch[-1]=',out_batch[-1].shape)
-			# print('\t', out_batch[-1])
-			# print('ybatch=',y_batch.shape)
-			# print('\t', y_batch)
-			# print('class=', torch.argmax(y_batch, dim=-1).shape)
-			# print('\t', torch.argmax(y_batch, dim=-1))
-			# print('loss=',loss)
-			# exit()
+
 
 		# # adding L1 regularization to the loss
 		# if weight_decay > 0.:
@@ -87,19 +75,13 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+def test(X, y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	):
 
-
-	loss_functions = {
-		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=0), torch.argmax(target, dim=-1), reduction="mean"),
-		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
-	}
 	# Define loss functions
-	loss_function = loss_functions.get(which_objective)
+	loss_function = loss_functions[which_task][which_objective]
 
 	model.eval()
 	with torch.no_grad():
@@ -111,38 +93,27 @@ def test(X, y, tokens, whichset, model, L, alphabet, letter_to_index, index_to_l
 			mask[idx_ablate-1] = 0
 		
 		if which_task == 'Pred':
+
 			ht, hT, out = model.forward(X, mask=mask)
+			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
 			loss = loss_function(out[:-1], X[1:])
+
+			cue=token[0]
+			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, [cue], L-1)
+			pred_seq = ''.join(pred_seq)
+			metric = pred_seq 
 
 		elif which_task == 'Class':
 			y = y.to(model.device)
 			ht, hT, out = model.forward(X, mask=mask)
-			loss = loss_function(out[-1], y)
+			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
+			loss = loss_function(out[-1], y)   
 			labels = torch.argmax(y, dim=-1)
 			preds = torch.argmax(out[-1], dim=-1)
 			accuracy = preds.eq(labels).sum().item(	)
+			metric = accuracy # accuracy is zero or one
 
-		# cued retrieval for testing prediction task
-		if which_task == 'Pred':
-			cues = np.append([k[0] for k in results['Loss']['train'].keys()], [k[0] for k in results['Loss']['test'].keys()])
-			alpha=len(alphabet)
-			# cue each letter
-			for cue in cues:
-				pred_seq = predict(alpha, model, letter_to_index, index_to_letter, [cue], L-1)
-				pred_seq = ''.join(pred_seq)
-				if pred_seq in results['Retrieval']['train']:
-					# print('train')
-					results['Retrieval']['train'][pred_seq].append(1)
-				elif pred_seq in results['Retrieval']['test']:
-					# print('test')
-					results['Retrieval']['test'][pred_seq].append(1)
-				elif pred_seq in results['Retrieval']['other']:
-					# print('other')
-					results['Retrieval']['other'][pred_seq].append(1)
-				else:
-					print('Predicted sequence not in dictionary!')
-
-	return accuracy, loss.item(), ht.detach().cpu().numpy()
+	return metric, loss.item(), ht.detach().cpu().numpy()
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
 	with torch.no_grad():
