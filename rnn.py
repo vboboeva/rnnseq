@@ -106,12 +106,17 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
-def make_results_dict(tokens_train, tokens_test, tokens_other, ablate):
+def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, ablate):
 
 	# Set up the dictionary that will contain results for each token
 	results = {}
 
-	for which_result in ['Loss', 'Accuracy', 'Retrieval','yh']:
+	if which_task == 'Pred':
+		metric='Retrieval'
+	if which_task == 'Class':
+		metric='Accuracy'
+
+	for which_result in ['Loss', metric, 'yh']:
 		results.update({which_result:{}}) 
 		for myset, label in (zip([tokens_train, tokens_test, tokens_other], ['train','test','other'])):
 			results[which_result].update({label:{}}) 
@@ -247,6 +252,7 @@ def main(
 
 	# Create the model
 	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init, layer_type=layer_type)
+	
 	print(model)
 	print(n_hidden)
 
@@ -254,7 +260,7 @@ def main(
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
 	# Set up the results dictionary
-	results = make_results_dict(tokens_train, tokens_test, tokens_other, ablate)
+	results = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, ablate)
 
 	def stats(x):
 		try:
@@ -264,7 +270,9 @@ def main(
 		return _res
 
 	print('TRAINING NETWORK')
+
 	if which_task in ['Pred', 'Class']:
+
 		for epoch in range(n_epochs + 1):
 			# print("X_train.shape (before) ", X_train.shape)
 			if epoch in epochs_snapshot:
@@ -288,65 +296,74 @@ def main(
 
 						for (_X, _y, token) in zip(X, y, tokens):
 							token = ''.join(token)
-							accuracy, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+
+							metric, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 								idx_ablate=idx_ablate, n_hidden=n_hidden)
 						
-							results['Accuracy'][whichset][token][idx_ablate].append(accuracy)
+							if which_task == 'Pred':
+
+								for sett in ['train', 'test', 'other']:
+
+									if metric in results['Retrieval'][sett]:
+										results['Retrieval'][sett][metric][idx_ablate].append(1)
+										# print(metric, sett)
+
+							elif which_task == 'Class':
+								results['Accuracy'][whichset][token][idx_ablate].append(metric)
+
 							results['Loss'][whichset][token][idx_ablate].append(loss)
 							results['yh'][whichset][token][idx_ablate].append(yh)
-				
-			# print("X_train.shape (after) ", X_train.shape)
-			# exit()
-
+			# END OF IF
+					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 
-		# #After training: looking for motifs
+			# #After training: looking for motifs
 
-		# # HYPOTHESIS 1
-		# mydict = {}
-		# # Identify all sequences with letter in a given position
-		# for letter in alphabet:
-		# 	mydict.update({letter:{}})
-		# 	# print('letter', letter)
-		# 	for position in range(L):
-		# 		# print('position', position)
-		# 		mydict[letter].update({position:{}})
-		# 		where = np.where(tokens_train[:, position] == letter)
-				
-		# 		X = X_train.permute((1,0,2))
-		# 		y = y_train
-		# 		tokens = tokens_train
+			# # HYPOTHESIS 1
+			# mydict = {}
+			# # Identify all sequences with letter in a given position
+			# for letter in alphabet:
+			# 	mydict.update({letter:{}})
+			# 	# print('letter', letter)
+			# 	for position in range(L):
+			# 		# print('position', position)
+			# 		mydict[letter].update({position:{}})
+			# 		where = np.where(tokens_train[:, position] == letter)
+					
+			# 		X = X_train.permute((1,0,2))
+			# 		y = y_train
+			# 		tokens = tokens_train
 
-		# 		X = X[where]
-		# 		y = y[where]
-		# 		tokens = tokens_train[where]
-		# 		# print('tokens', tokens)
+			# 		X = X[where]
+			# 		y = y[where]
+			# 		tokens = tokens_train[where]
+			# 		# print('tokens', tokens)
 
-		# 		mydict[letter][position].update({'Loss':[]})
-		# 		mydict[letter][position].update({'Accuracy':[]})
-		# 		# ablate units one by one, the zeroth element is with no ablation
+			# 		mydict[letter][position].update({'Loss':[]})
+			# 		mydict[letter][position].update({'Accuracy':[]})
+			# 		# ablate units one by one, the zeroth element is with no ablation
 
-		# 		for idx_ablate in range(n_hidden+1):
+			# 		for idx_ablate in range(n_hidden+1):
 
-		# 			# print('ablating unit %s'%idx_ablate)
-		# 			accuracy_mean=0
-		# 			loss_mean=0
-		# 			# Without and without ablation evaluate classification accuracy on this set of sequences
-		# 			for (_X, _y, _token) in zip(X, y, tokens):
-		# 				accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
-		# 				accuracy_mean=accuracy_mean+accuracy
-		# 				loss_mean=loss_mean+loss
-		# 			accuracy_mean=accuracy_mean/np.shape(tokens)[0]
-		# 			loss_mean=loss_mean/np.shape(tokens)[0]
-		# 			# print(accuracy_mean)
+			# 			# print('ablating unit %s'%idx_ablate)
+			# 			accuracy_mean=0
+			# 			loss_mean=0
+			# 			# Without and without ablation evaluate classification accuracy on this set of sequences
+			# 			for (_X, _y, _token) in zip(X, y, tokens):
+			# 				accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+			# 				accuracy_mean=accuracy_mean+accuracy
+			# 				loss_mean=loss_mean+loss
+			# 			accuracy_mean=accuracy_mean/np.shape(tokens)[0]
+			# 			loss_mean=loss_mean/np.shape(tokens)[0]
+			# 			# print(accuracy_mean)
 
-		# 			mydict[letter][position]['Loss'].append(loss_mean)
-		# 			mydict[letter][position]['Accuracy'].append(accuracy_mean)					
+			# 			mydict[letter][position]['Loss'].append(loss_mean)
+			# 			mydict[letter][position]['Accuracy'].append(accuracy_mean)					
 	else:
 		print("Task not recognized!")
 		return
 
-	# Quick and dirty plot of loss (comment when running on cluster, for local use)
+	# Quick and dirty plot of l:qoss (comment when running on cluster, for local use)
 	# plot_weights(results, 5)
 	plot_loss(n_types, n_hidden, ablate, results)
 	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
@@ -382,8 +399,6 @@ if __name__ == "__main__":
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False
 	)
-
-
 
 	# parameters
 	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
