@@ -106,6 +106,35 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
+def make_tokens(all_tokens, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
+	# make train and test data
+	n_train = int(frac_train * len(all_tokens))
+	n_test = len(all_tokens) - n_train
+	n_other = alpha ** L - n_train - n_test
+
+	print('number of train', n_train)
+	print('number of test', n_test)
+
+	torch.manual_seed(sim_datasplit)
+	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
+	for i, ids_type in enumerate(ids):
+		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
+
+	num_types = int(len(all_tokens) / num_tokens_onetype)
+	n_train_type = n_train // num_types
+	train_ids = ids[:, :n_train_type].reshape(-1)
+	test_ids = ids[:, n_train_type:].reshape(-1)
+
+	X_train = X[:, train_ids, :]
+	X_test = X[:, test_ids, :]
+	y_train = y[train_ids, :]
+	y_test = y[test_ids, :]
+
+	tokens_train = all_tokens[train_ids, :]
+	tokens_test = all_tokens[test_ids, :]
+
+	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, n_train, n_test, n_other, num_types
+
 def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, ablate):
 
 	# Set up the dictionary that will contain results for each token
@@ -131,6 +160,85 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, ablat
 
 	return results
 
+def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, ablate):
+
+	for (whichset, X, y, tokens) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
+
+		X = X.permute((1,0,2))
+		# print("X after ", X.shape)
+
+		if ablate == False:
+			range_ablate=1
+		else:
+			range_ablate=n_hidden+1
+
+		# ablate units one by one
+		for idx_ablate in range(range_ablate):
+
+			for (_X, _y, token) in zip(X, y, tokens):
+				token = ''.join(token)
+
+				metric, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+					idx_ablate=idx_ablate, n_hidden=n_hidden)
+			
+				if which_task == 'Pred':
+
+					for sett in ['train', 'test', 'other']:
+
+						if metric in results['Retrieval'][sett]:
+							results['Retrieval'][sett][metric][idx_ablate].append(1)
+							# print(metric, sett)
+
+				elif which_task == 'Class':
+					results['Accuracy'][whichset][token][idx_ablate].append(metric)
+
+				results['Loss'][whichset][token][idx_ablate].append(loss)
+				results['yh'][whichset][token][idx_ablate].append(yh)
+
+
+# def Hypo1():
+# 	# HYPOTHESIS 1
+# 	mydict = {}
+# 	# Identify all sequences with letter in a given position
+# 	for letter in alphabet:
+# 		mydict.update({letter:{}})
+# 		# print('letter', letter)
+# 		for position in range(L):
+# 			# print('position', position)
+# 			mydict[letter].update({position:{}})
+# 			where = np.where(tokens_train[:, position] == letter)
+			
+# 			X = X_train.permute((1,0,2))
+# 			y = y_train
+# 			tokens = tokens_train
+
+# 			X = X[where]
+# 			y = y[where]
+# 			tokens = tokens_train[where]
+# 			# print('tokens', tokens)
+
+# 			mydict[letter][position].update({'Loss':[]})
+# 			mydict[letter][position].update({'Accuracy':[]})
+# 			# ablate units one by one, the zeroth element is with no ablation
+
+# 			for idx_ablate in range(n_hidden+1):
+
+# 				# print('ablating unit %s'%idx_ablate)
+# 				accuracy_mean=0
+# 				loss_mean=0
+# 				# Without and without ablation evaluate classification accuracy on this set of sequences
+# 				for (_X, _y, _token) in zip(X, y, tokens):
+# 					accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
+# 					accuracy_mean=accuracy_mean+accuracy
+# 					loss_mean=loss_mean+loss
+# 				accuracy_mean=accuracy_mean/np.shape(tokens)[0]
+# 				loss_mean=loss_mean/np.shape(tokens)[0]
+# 				# print(accuracy_mean)
+
+# 				mydict[letter][position]['Loss'].append(loss_mean)
+# 				mydict[letter][position]['Accuracy'].append(accuracy_mean)				
+
+
 def savefiles(output_folder_name, sim, which_task, model, results):
 	
 	# Save the model state
@@ -143,25 +251,6 @@ def savefiles(output_folder_name, sim, which_task, model, results):
 	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:
 	# 	_dumps = json.dumps(results)
 	# 	json.dump(_dumps, handle)
-
-
-	# Save snapshots of connectivity across training 
-	# np.save('%s/%s_sim%d' % (output_folder_name, 'Whh', sim), results['Whh'])
-
-	# sub_results = {k: v for k, v in results.items() if k not in ['Whh']}
-
-	# for key in sub_results.keys():
-	# 	nested_keys = [k for k in sub_results[key].keys()]
-	# 	for nk in nested_keys:
-	# 		if len(results[key][nk]) != 0:
-	# 			if which_task == 'Class':
-	# 				if key != 'Retrieval':
-	# 					if nk != 'other':
-	# 						print('entered if')
-	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
-	# 			elif which_task == 'Pred':
-	# 				if key != 'Accuracy':
-	# 						np.save('%s/%s_%s_sim%d' % (output_folder_name, key, nk, sim), results[key][nk])
 
 ###########################################
 ################## M A I N ################
@@ -197,31 +286,7 @@ def main(
 
 	X, y, all_tokens, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
-	# make train and test data
-	n_train = int(frac_train * len(all_tokens))
-	n_test = len(all_tokens) - n_train
-	n_other = alpha ** L - n_train - n_test
-
-	print('number of train', n_train)
-	print('number of test', n_test)
-
-	torch.manual_seed(sim_datasplit)
-	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
-	for i, ids_type in enumerate(ids):
-		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
-
-	num_types = int(len(all_tokens) / num_tokens_onetype)
-	n_train_type = n_train // num_types
-	train_ids = ids[:, :n_train_type].reshape(-1)
-	test_ids = ids[:, n_train_type:].reshape(-1)
-
-	X_train = X[:, train_ids, :]
-	X_test = X[:, test_ids, :]
-	y_train = y[train_ids, :]
-	y_test = y[test_ids, :]
-
-	tokens_train = all_tokens[train_ids, :]
-	tokens_test = all_tokens[test_ids, :]
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, n_train, n_test, n_other, num_types = make_tokens(all_tokens, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
@@ -276,89 +341,16 @@ def main(
 		for epoch in range(n_epochs + 1):
 			# print("X_train.shape (before) ", X_train.shape)
 			if epoch in epochs_snapshot:
-				# print(epoch)
+				print(epoch)
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				for (whichset, X, y, tokens) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
-
-					# print("X before ", X.shape)
-					X = X.permute((1,0,2))
-					# print("X after ", X.shape)
-
-					if ablate == False:
-						range_ablate=1
-					else:
-						range_ablate=n_hidden+1
-
-					# ablate units one by one
-					for idx_ablate in range(range_ablate):
-
-						for (_X, _y, token) in zip(X, y, tokens):
-							token = ''.join(token)
-
-							metric, loss, yh = test(_X, _y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
-								idx_ablate=idx_ablate, n_hidden=n_hidden)
-						
-							if which_task == 'Pred':
-
-								for sett in ['train', 'test', 'other']:
-
-									if metric in results['Retrieval'][sett]:
-										results['Retrieval'][sett][metric][idx_ablate].append(1)
-										# print(metric, sett)
-
-							elif which_task == 'Class':
-								results['Accuracy'][whichset][token][idx_ablate].append(metric)
-
-							results['Loss'][whichset][token][idx_ablate].append(loss)
-							results['yh'][whichset][token][idx_ablate].append(yh)
-			# END OF IF
+				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, ablate)
 					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 
-			# #After training: looking for motifs
-
-			# # HYPOTHESIS 1
-			# mydict = {}
-			# # Identify all sequences with letter in a given position
-			# for letter in alphabet:
-			# 	mydict.update({letter:{}})
-			# 	# print('letter', letter)
-			# 	for position in range(L):
-			# 		# print('position', position)
-			# 		mydict[letter].update({position:{}})
-			# 		where = np.where(tokens_train[:, position] == letter)
-					
-			# 		X = X_train.permute((1,0,2))
-			# 		y = y_train
-			# 		tokens = tokens_train
-
-			# 		X = X[where]
-			# 		y = y[where]
-			# 		tokens = tokens_train[where]
-			# 		# print('tokens', tokens)
-
-			# 		mydict[letter][position].update({'Loss':[]})
-			# 		mydict[letter][position].update({'Accuracy':[]})
-			# 		# ablate units one by one, the zeroth element is with no ablation
-
-			# 		for idx_ablate in range(n_hidden+1):
-
-			# 			# print('ablating unit %s'%idx_ablate)
-			# 			accuracy_mean=0
-			# 			loss_mean=0
-			# 			# Without and without ablation evaluate classification accuracy on this set of sequences
-			# 			for (_X, _y, _token) in zip(X, y, tokens):
-			# 				accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
-			# 				accuracy_mean=accuracy_mean+accuracy
-			# 				loss_mean=loss_mean+loss
-			# 			accuracy_mean=accuracy_mean/np.shape(tokens)[0]
-			# 			loss_mean=loss_mean/np.shape(tokens)[0]
-			# 			# print(accuracy_mean)
-
-			# 			mydict[letter][position]['Loss'].append(loss_mean)
-			# 			mydict[letter][position]['Accuracy'].append(accuracy_mean)					
+			# After training: looking for motifs
+			# Hypo1()	
 	else:
 		print("Task not recognized!")
 		return
@@ -384,11 +376,11 @@ if __name__ == "__main__":
 		n_layers = 1,
 		L = 4,
 		m = 2,
-		which_task = 'Class',  # Specify task
+		which_task = 'Pred',  # Specify task
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
-		n_epochs = 5000,
+		n_epochs = 2000,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
@@ -411,7 +403,7 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 20
+	size = 1
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]

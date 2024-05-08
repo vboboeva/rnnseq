@@ -59,7 +59,6 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 			ht, hT, out_batch = model.forward(X_batch)
 			loss = loss_function(out_batch[-1], y_batch)
 
-
 		# # adding L1 regularization to the loss
 		# if weight_decay > 0.:
 		# 	loss += weight_decay * torch.mean(torch.abs(model.h2h.weight))
