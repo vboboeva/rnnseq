@@ -61,18 +61,17 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	X, y, all_tokens, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
+	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, n_train, n_test, n_other, num_types = make_tokens(all_tokens, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types = make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
+	labels_other = -1*np.ones(len(tokens_other))
 
 	# Train and test network
 	torch.manual_seed(sim)
 	n_batches = n_train // batch_size
-
-	# print('n_batches', n_batches)
 
 	# Dynamically determine the output size of the model
 	task_to_output_size = {
@@ -102,7 +101,7 @@ def main(
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
 	# Set up the results dictionary
-	results = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, ablate)
+	results = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate)
 
 	def stats(x):
 		try:
@@ -122,7 +121,7 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, ablate)
+				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test,letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate)
 					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
 
@@ -134,7 +133,7 @@ def main(
 
 	# Quick and dirty plot of l:qoss (comment when running on cluster, for local use)
 	# plot_weights(results, 5)
-	plot_loss(n_types, n_hidden, ablate, results)
+	# plot_loss(n_types, n_hidden, ablate, results)
 	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
 
 	return model, results
@@ -153,7 +152,7 @@ if __name__ == "__main__":
 		n_layers = 1,
 		L = 4,
 		m = 2,
-		which_task = 'Pred',  # Specify task
+		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
 		which_init = None,
 		which_transfer='relu',
@@ -163,7 +162,7 @@ if __name__ == "__main__":
 		n_repeats = 1,
 		n_types = -1, # set minimum 2 for task to make sense
 		alpha = 5,
-		snap_freq = 20, # snapshot of net activity every snap_freq epochs
+		snap_freq = 200, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False

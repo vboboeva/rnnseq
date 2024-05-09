@@ -74,7 +74,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def test(X, y, token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	):
@@ -100,17 +100,16 @@ def test(X, y, token, whichset, model, L, alphabet, letter_to_index, index_to_le
 			cue=token[0]
 			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, [cue], L-1)
 			pred_seq = ''.join(pred_seq)
-			metric = pred_seq 
+			metric = pred_seq
 
 		elif which_task == 'Class':
 			y = y.to(model.device)
 			ht, hT, out = model.forward(X, mask=mask)
 			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
 			loss = loss_function(out[-1], y)   
-			labels = torch.argmax(y, dim=-1)
-			preds = torch.argmax(out[-1], dim=-1)
-			accuracy = preds.eq(labels).sum().item(	)
-			metric = accuracy # accuracy is zero or one
+			label = torch.argmax(y, dim=-1)
+			predicted = torch.argmax(out[-1], dim=-1)
+			metric = np.array(predicted)
 
 	return metric, loss.item(), ht.detach().cpu().numpy()
 
@@ -126,14 +125,14 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_lett
 				x[k,:] = F.one_hot(torch.tensor(p), alpha)
 			# y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
 			# x has to have dimensions (L, sizetrain, alpha)
-			_, _, y_pred = model.forward(x)#.permute(1,0,2)
+			_, _, y_pred = model.forward(x) #.permute(1,0,2)
 
 			# last_letter_logits has dimension alpha
 			last_letter_logits = y_pred[-1,:]
 			# applies a softmax to transform activations into a proba, has dimensions alpha
 			proba = temperature_scaled_softmax(last_letter_logits, temperature=1.).detach().cpu().numpy()
 			# then samples randomly from that proba distribution 
-			letter_index = np.random.choice(len(last_letter_logits), p= proba)
+			letter_index = np.random.choice(len(last_letter_logits), p=proba)
 
 			# appends it into the sequence produced
 			seq_start.append(index_to_letter[letter_index])
