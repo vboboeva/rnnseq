@@ -52,7 +52,8 @@ def main(
 	snap_freq=2,
 	drop_connect = 0.,
 	weight_decay = 0.,
-	ablate=True
+	ablate=True,
+	delay=0
 ):
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
@@ -121,9 +122,9 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test,letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate)
+				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test,letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay=delay)
 					
-			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay)
+			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay, delay=delay)
 
 			# After training: looking for motifs
 			# Hypo1()	
@@ -162,10 +163,11 @@ if __name__ == "__main__":
 		n_repeats = 1,
 		n_types = -1, # set minimum 2 for task to make sense
 		alpha = 5,
-		snap_freq = 200, # snapshot of net activity every snap_freq epochs
+		snap_freq = 20, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
-		ablate = False
+		ablate = False,
+		delay=4
 	)
 
 	# parameters
@@ -188,8 +190,8 @@ if __name__ == "__main__":
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_ablate%s' % (
-		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['ablate'])
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s' % (
+		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'])
 
 		os.makedirs(output_folder_name, exist_ok=True)
 

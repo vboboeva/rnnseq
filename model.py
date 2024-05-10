@@ -320,7 +320,7 @@ class RNN (Net):
                 std = scaling_f(f_in)
                 pars.data.normal_(0., std)
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, delay=0):
         '''
         x
         ---
@@ -331,7 +331,6 @@ class RNN (Net):
 
         # print("x.shape (input) ", x.shape)
         # print("mask.shape ", mask.shape)
-
 
         if mask is not None:
             assert isinstance(mask, torch.Tensor) and mask.shape == (self.d_hidden,), \
@@ -366,6 +365,11 @@ class RNN (Net):
         ht = _masking(h0)
         hidden = []
         
+        # pad input with 0 along the time axis for `delay` time steps
+        if delay != 0:
+            assert isinstance(delay, int), "delay must be an integer"
+            x = torch.cat([x, torch.zeros((delay,*x.shape[1:]))], dim=0)
+            _shape = _shape[0]+delay, *_shape[1:]
 
         # t is the sequence of time-steps
         for t, xt in enumerate(x):
@@ -383,7 +387,6 @@ class RNN (Net):
 
             hidden.append(z)
             ht = z 
-
 
         hidden = torch.reshape(torch.stack(hidden), _shape)
 

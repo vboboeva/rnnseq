@@ -28,7 +28,7 @@ loss_functions = {
 # 			train network 				 #
 ##########################################
 
-def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task, weight_decay=0.):
+def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task, weight_decay=0., delay=0):
 
 	# Define loss functions
 	loss_function = loss_functions[which_task][which_objective]
@@ -56,7 +56,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 		
 		elif which_task == 'Class':
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-			ht, hT, out_batch = model.forward(X_batch)
+			ht, hT, out_batch = model.forward(X_batch, delay=delay)
 			loss = loss_function(out_batch[-1], y_batch)
 
 		# # adding L1 regularization to the loss
@@ -77,6 +77,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
+	delay=0
 	):
 
 	# Define loss functions
@@ -104,7 +105,7 @@ def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, inde
 
 		elif which_task == 'Class':
 			y = y.to(model.device)
-			ht, hT, out = model.forward(X, mask=mask)
+			ht, hT, out = model.forward(X, mask=mask, delay=delay)
 			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
 			loss = loss_function(out[-1], y)   
 			label = torch.argmax(y, dim=-1)

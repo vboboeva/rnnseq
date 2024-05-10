@@ -157,7 +157,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 	results['Whh']=[]
 	return results
 
-def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate):
+def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay):
 
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
@@ -175,7 +175,7 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
 				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
-					idx_ablate=idx_ablate, n_hidden=n_hidden)
+					idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay)
 			
 				if which_task == 'Pred':
 					for sett in ['train', 'test', 'other']:
