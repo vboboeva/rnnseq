@@ -154,6 +154,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 				if ablate == True: 
 					for unit_ablated in range(1, n_hidden+1):
 						results[whichmeasure][whichset][label][token].update({unit_ablated:[]})
+
 	results['Whh']=[]
 	return results
 
@@ -174,19 +175,29 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
-				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
-					idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay)
-			
+				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay)
+				print(Z)
+
 				if which_task == 'Pred':
-					for sett in ['train', 'test', 'other']:
-						if Z in results['Retrieval'][sett]:
-							results['Retrieval'][sett][label][Z][idx_ablate].append(1)
+					for sett in ['train', 'test']:
+						typelabels=results['Retrieval'][sett].keys()
+						for typelabel in typelabels:
+							if Z in results['Retrieval'][sett][typelabel]:
+								results['Retrieval'][sett][typelabel][Z][idx_ablate].append(1)
+								print('sett', sett)
+								print('typelabel', typelabel)
+					for sett in ['other']:
+						if Z in results['Retrieval'][sett][-1]:
+							results['Retrieval'][sett][-1][Z][idx_ablate].append(1)
+							typelabel=-1
+							print(sett)	
 
 				elif which_task == 'Class':	
 					results['Retrieval'][whichset][label][token][idx_ablate].append(Z)
 
 				results['Loss'][whichset][label][token][idx_ablate].append(loss)
 				results['yh'][whichset][label][token][idx_ablate].append(yh)
+	# print(results['Retrieval']['train'])
 
 def savefiles(output_folder_name, sim, which_task, model, results):
 	
