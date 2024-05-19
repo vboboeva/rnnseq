@@ -229,8 +229,8 @@ class RNN (Net):
             layer_type=nn.Linear,
             which_init=None,
             model_filename=None, # file with model parameters
-            # parameters read from file are not trained
-            to_freeze = [], # list with elements in ['i2h', 'h2h', 'h2o']
+            to_freeze = [], # parameters to keep frozen; list with elements in ['i2h', 'h2h', 'h2o']
+            from_file = [], # parameters to set from file; list with elements in ['i2h', 'h2h', 'h2o']
             bias=True,
             device="cpu",
             train_i2h = True,
@@ -238,6 +238,8 @@ class RNN (Net):
 
         super(RNN, self).__init__()
         init=which_init
+        self._from_file = []
+        self._model_filename=model_filename
 
         self.device = device
         # Defining the number of layers and the nodes in each layer
@@ -245,32 +247,39 @@ class RNN (Net):
         self.d_output = d_output
         self.d_hidden = d_hidden
 
-        if train_i2h:
-            self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
+        # if train_i2h:
+        #     self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
 
-        else:
-            # MANUALLY DEFINE INPUT WEIGHTS HERE
-            self._input_weights = torch.cat([torch.eye(self.d_input), torch.zeros(self.d_hidden - self.d_input, self.d_input)]) 
+        # else:
+        #     # MANUALLY DEFINE INPUT WEIGHTS HERE
+        #     self._input_weights = torch.cat([torch.eye(self.d_input), torch.zeros(self.d_hidden - self.d_input, self.d_input)]) 
 
-            # _n_repeats = self.d_hidden // self.d_input
-            # assert self.d_hidden % self.d_input == 0, \
-            #     "Hidden layer size should be integer multiple of input size"
-            # self._input_weights = torch.repeat_interleave(_input_weights, _n_repeats, dim=0)
+        #     # _n_repeats = self.d_hidden // self.d_input
+        #     # assert self.d_hidden % self.d_input == 0, \
+        #     #     "Hidden layer size should be integer multiple of input size"
+        #     # self._input_weights = torch.repeat_interleave(_input_weights, _n_repeats, dim=0)
             
-            self._input_weights.requires_grad = False
+        #     self._input_weights.requires_grad = False
 
-            self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
+        #     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
+        self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
         if 'i2h' in to_freeze:
             freeze(self.i2h)
+        if 'i2h' in from_file:
+            self._from_file += ['i2h.'+n for n,_ in self.i2h.named_parameters()]
 
         self.h2h = layer_type (d_hidden, d_hidden, bias=bias)
         if 'h2h' in to_freeze:
             freeze(self.h2h)
+        if 'h2h' in from_file:
+            self._from_file += ['h2h.'+n for n,_ in self.h2h.named_parameters()]
 
         self.h2o = nn.Linear (d_hidden, d_output, bias=bias)
         if 'h2o' in to_freeze:
             freeze(self.h2o)
+        if 'h2o' in from_file:
+            self._from_file += ['h2o.'+n for n,_ in self.h2o.named_parameters()]
 
         if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
@@ -299,26 +308,23 @@ class RNN (Net):
             drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
         drop_l = drop_l.split(",")
 
-        if model_filename is not None:
-            # If the file containing parameters can be successfully loaded,
-            # then `init` option is overridden (`init` set to None).
-            # Otherwise, an error message is printed, and the initialisation
-            # from file is skipped.
-            try:
-                print(f"Trying to load parameters from file '{model_filename}'")
-                self.load(model_filename)
-                init = None
-            except Exception as e:
-                print("Failed to load parameters from file:", e)
-        if init is not None:
-            self.init_weights (init)
+        self.init_weights (init)
 
     def init_weights(self, init, seed=None):
+        
+        _pars_dict = {}
+        if self._model_filename is not None:
+            # The parameters to be set from file are removed from the list of
+            # parameters to which the initialisation rule is applied
+            print(f"Loading parameters from file '{self._model_filename}'")
+            _pars_dict = torch.load(self._model_filename)
 
         if seed is not None:
             torch.manual_seed(seed)
 
-        if init == "Rich":
+        if init is None:
+            pass
+        elif init == "Rich":
             # initialisation of the weights -- N(0, 1/n)
             init_f = lambda f_in: 1./f_in
         elif init == "Lazy":
@@ -327,22 +333,29 @@ class RNN (Net):
         elif init == "Const":
             # initialisation of the weights independent of n
             init_f = lambda f_in: 0.001
-        elif isinstance(init, float) and init > 0:
-            # initialisation of the weights -- N(0, 1/n**alpha)
-            '''
-            UNTESTED
-            '''
-            init_f = lambda f_in: 1./np.power(f_in, init)
         else:
             raise ValueError(
                 f"Invalid init option '{init}'\n" + \
-                 "Choose either 'Rich', 'Lazy', 'Const' or a float larger than 0")
+                 "Choose either None, 'Rich', 'Lazy' or 'Const'")
         
         for name, pars in self.named_parameters():
-            if "weight" in name:
-                f_in = 1.*pars.data.size()[1]
-                std = scaling_f(f_in)
-                pars.data.normal_(0., std)
+            if name in self._from_file:
+                # print(pars)
+                # print(_pars_dict[name])
+                pars.data = _pars_dict[name]
+            elif init is not None:
+                if "weight" in name:
+                    f_in = 1.*pars.data.size()[1]
+                    std = init_f(f_in)
+                    pars.data.normal_(0., std)
+
+        # check
+        for name, pars in self.named_parameters():
+            print(name, "\t", torch.max(pars - _pars_dict[name]))
+        exit()
+        # end check
+
+
 
     def forward(self, x, mask=None, delay=0):
         '''
