@@ -229,7 +229,7 @@ class RNN (Net):
         ):
 
         super(RNN, self).__init__()
-        scaling=which_init
+        init=which_init
 
         self.device = device
         # Defining the number of layers and the nodes in each layer
@@ -283,32 +283,32 @@ class RNN (Net):
             drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
         drop_l = drop_l.split(",")
 
-        if scaling is not None:
-            self.init_weights (scaling)
+        if init is not None:
+            self.init_weights (init)
 
-    def init_weights(self, scaling, seed=None):
+    def init_weights(self, init, seed=None):
         
         if seed is not None:
             torch.manual_seed(seed)
 
-        if scaling == "Rich":
+        if init == "Rich":
             # initialisation of the weights -- N(0, 1/n)
-            scaling_f = lambda f_in: 1./f_in
-        elif scaling == "Lazy":
+            init_f = lambda f_in: 1./f_in
+        elif init == "Lazy":
             # initialisation of the weights -- N(0, 1/sqrt(n))
-            scaling_f = lambda f_in: 1./np.sqrt(f_in)
-        elif scaling == "Const":
+            init_f = lambda f_in: 1./np.sqrt(f_in)
+        elif init == "Const":
             # initialisation of the weights independent of n
-            scaling_f = lambda f_in: 0.001
-        elif isinstance(scaling, float) and scaling > 0:
+            init_f = lambda f_in: 0.001
+        elif isinstance(init, float) and init > 0:
             # initialisation of the weights -- N(0, 1/n**alpha)
             '''
             UNTESTED
             '''
-            scaling_f = lambda f_in: 1./np.power(f_in, scaling)
+            init_f = lambda f_in: 1./np.power(f_in, init)
         else:
             raise ValueError(
-                f"Invalid scaling option '{scaling}'\n" + \
+                f"Invalid init option '{init}'\n" + \
                  "Choose either 'sqrt', 'lin' or a float larger than 0")
         
         for name, pars in self.named_parameters():
