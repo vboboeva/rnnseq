@@ -201,7 +201,7 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 def savefiles(output_folder_name, sim, which_task, model, results,  token_to_type, token_to_set):
 	
 	# Save the model state
-	torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
+	model.save('%s/model_state_sim%d.pth' % (output_folder_name, sim))
 
 	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
 	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
