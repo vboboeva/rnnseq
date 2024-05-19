@@ -223,6 +223,8 @@ class RNN (Net):
             nonlinearity='relu',
             layer_type=nn.Linear,
             which_init=None,
+            model_filename=None, # file with model parameters
+            # parameters read from file are not trained
             bias=True,
             device="cpu",
             train_i2h = True,
@@ -283,11 +285,22 @@ class RNN (Net):
             drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
         drop_l = drop_l.split(",")
 
+        if model_filename is not None:
+            # If the file containing parameters can be successfully loaded,
+            # then `init` option is overridden (`init` set to None).
+            # Otherwise, an error message is printed, and the initialisation
+            # from file is skipped.
+            try:
+                print(f"Trying to load parameters from file '{model_filename}'")
+                self.load(model_filename)
+                init = None
+            except Exception as e:
+                print("Failed to load parameters from file:", e)
         if init is not None:
             self.init_weights (init)
 
     def init_weights(self, init, seed=None):
-        
+
         if seed is not None:
             torch.manual_seed(seed)
 
