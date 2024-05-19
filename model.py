@@ -138,6 +138,11 @@ import functools
 
 ############################################################################
 
+def freeze(module):
+    for name, pars in module.named_parameters():
+        pars.requires_grad = False
+        
+
 class LinearWeightDropout(nn.Linear):
     '''
     Linear layer with weights dropout (synaptic failures)
@@ -225,6 +230,7 @@ class RNN (Net):
             which_init=None,
             model_filename=None, # file with model parameters
             # parameters read from file are not trained
+            to_freeze = [], # list with elements in ['i2h', 'h2h', 'h2o']
             bias=True,
             device="cpu",
             train_i2h = True,
@@ -255,8 +261,16 @@ class RNN (Net):
 
             self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
+        if 'i2h' in to_freeze:
+            freeze(self.i2h)
+
         self.h2h = layer_type (d_hidden, d_hidden, bias=bias)
+        if 'h2h' in to_freeze:
+            freeze(self.h2h)
+
         self.h2o = nn.Linear (d_hidden, d_output, bias=bias)
+        if 'h2o' in to_freeze:
+            freeze(self.h2o)
 
         if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
