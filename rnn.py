@@ -41,7 +41,9 @@ def main(
 	m = 2,
 	which_task=None,
 	which_objective='CE',
-	which_init=None,
+	model_filename=None, # string with parameters filename -- has priority over `which_init` option
+	which_init=None, # 'const', 'lazy', 'rich' 
+	to_freeze = [], # layers not to be updated 
 	which_transfer='relu',
 	n_epochs=10,
 	batch_size=7,
@@ -94,7 +96,10 @@ def main(
 		layer_type = nn.Linear
 
 	# Create the model
-	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init, layer_type=layer_type)
+	model = RNN(alpha, n_hidden, n_layers, output_size, 
+		nonlinearity=which_transfer, device=device, 
+		model_filename = model_filename, to_freeze=to_freeze,
+		which_init=which_init, layer_type=layer_type)
 	
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
