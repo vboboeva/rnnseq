@@ -133,32 +133,37 @@ def make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, al
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types
 
-def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate):
+def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
 
 	# Set up the dictionary that will contain results for each token
 	results = {}
+	token_to_type = {}
+	token_to_set = {}
 
-	for whichmeasure in ['Loss', 'Retrieval', 'yh']:
-		results.update({whichmeasure:{}}) 
-		
-		for whichset, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
-			results[whichmeasure].update({whichset:{}}) 
+	for measure in ['Loss', 'Retrieval', 'yh']:
+		results.update({measure:{}}) 
+
+		for set_, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
+
 			tokens = [''.join(token) for token in tokens]
+		
 			for token, label in (zip(tokens, labels)):
-				if label in results[whichmeasure][whichset]:
-					pass
-				else:
-					results[whichmeasure][whichset].update({label:{}})
-				results[whichmeasure][whichset][label].update({token:{}})
-				results[whichmeasure][whichset][label][token].update({0:[]})
-				if ablate == True: 
-					for unit_ablated in range(1, n_hidden+1):
-						results[whichmeasure][whichset][label][token].update({unit_ablated:[]})
+				token_to_set.update({token:set_}) 
+				token_to_type.update({token:label})
 
+				results[measure].update({token:{}})
+
+				for epoch in epochs_snapshot:
+					results[measure][token].update({epoch:{}})
+					results[measure][token][epoch].update({0:[]})
+			
+					if ablate == True: 		
+						for unit_ablated in range(1, n_hidden+1):
+							results[measure][token][epoch].update({unit_ablated:[]})
 	results['Whh']=[]
-	return results
+	return results, token_to_type, token_to_set
 
-def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay):
+def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch):
 
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
@@ -175,37 +180,38 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
+
 				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay)
-				print(Z)
+
+				if which_task == 'Class':	
+					results['Retrieval'][token][epoch][idx_ablate]=Z
+					results['Loss'][token][epoch][idx_ablate]=loss
+					results['yh'][token][epoch][idx_ablate]=yh
 
 				if which_task == 'Pred':
-					for sett in ['train', 'test']:
-						typelabels=results['Retrieval'][sett].keys()
-						for typelabel in typelabels:
-							if Z in results['Retrieval'][sett][typelabel]:
-								results['Retrieval'][sett][typelabel][Z][idx_ablate].append(1)
-								print('sett', sett)
-								print('typelabel', typelabel)
-					for sett in ['other']:
-						if Z in results['Retrieval'][sett][-1]:
-							results['Retrieval'][sett][-1][Z][idx_ablate].append(1)
-							typelabel=-1
-							print(sett)	
+					# if (results['Retrieval'][Z][epoch][idx_ablate]) == []:
+					# 	results['Retrieval'][Z][epoch][idx_ablate]=[1]
+					# 	results['Loss'][Z][epoch][idx_ablate]=[loss]
+					# 	results['yh'][Z][epoch][idx_ablate]=[yh]
+					# else:
+					results['Retrieval'][Z][epoch][idx_ablate].append(1)
+					results['Loss'][Z][epoch][idx_ablate].append(loss)
+					results['yh'][Z][epoch][idx_ablate].append(yh)
 
-				elif which_task == 'Class':	
-					results['Retrieval'][whichset][label][token][idx_ablate].append(Z)
-
-				results['Loss'][whichset][label][token][idx_ablate].append(loss)
-				results['yh'][whichset][label][token][idx_ablate].append(yh)
-	# print(results['Retrieval']['train'])
-
-def savefiles(output_folder_name, sim, which_task, model, results):
+def savefiles(output_folder_name, sim, which_task, model, results,  token_to_type, token_to_set):
 	
 	# Save the model state
 	torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
 
 	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
 	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+	with open('%s/token_to_set_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
+	    pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+	with open('%s/token_to_type_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
+	    pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 	# # Convert and write JSON object to file
 	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:

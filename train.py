@@ -98,8 +98,9 @@ def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, inde
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
 			loss = loss_function(out[:-1], X[1:])
 
-			cue=token[0]
-			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, [cue], L-1)
+			cue= [str(s) for s in token[:-1]] # put token[0] for cueing single letter
+
+			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
 			pred_seq = ''.join(pred_seq)
 			metric = pred_seq
 
@@ -114,11 +115,11 @@ def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, inde
 
 	return metric, loss.item(), ht.detach().cpu().numpy()
 
-def predict(alpha, model, letter_to_index, index_to_letter, seq_start, next_letters):
+def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_letters):
 	with torch.no_grad():
 
 		# goes through each of the seq_start we want to predict
-		for i in range(0, next_letters):
+		for i in range(0, len_next_letters):
 			
 			x = torch.zeros((len(seq_start), alpha), dtype=torch.float32).to(model.device)
 			pos = [letter_to_index[w] for w in seq_start[i:]]

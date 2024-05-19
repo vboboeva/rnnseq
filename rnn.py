@@ -55,6 +55,7 @@ def main(
 	ablate=True,
 	delay=0
 ):
+	print('TASK', which_task)
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
 
@@ -95,21 +96,12 @@ def main(
 	# Create the model
 	model = RNN(alpha, n_hidden, n_layers, output_size, nonlinearity=which_transfer, device=device, which_init=which_init, layer_type=layer_type)
 	
-	print(model)
-	print(n_hidden)
-
 	# Set up the optimizer
 	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
 
 	# Set up the results dictionary
-	results = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate)
+	results, token_to_type, token_to_set = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
 
-	def stats(x):
-		try:
-			_res = torch.mean(x), torch.std(x)
-		except:
-			_res = None
-		return _res
 
 	print('TRAINING NETWORK')
 
@@ -122,7 +114,7 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test,letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay=delay)
+				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch)
 					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay, delay=delay)
 
@@ -137,7 +129,7 @@ def main(
 	# plot_loss(n_types, n_hidden, ablate, results)
 	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
 
-	return model, results
+	return model, results, token_to_type, token_to_set
 
 ##################################################
 
@@ -153,21 +145,21 @@ if __name__ == "__main__":
 		n_layers = 1,
 		L = 4,
 		m = 2,
-		which_task = 'Class',  # Specify task
+		which_task = 'Pred',  # Specify task
 		which_objective = 'CE',
 		which_init = None,
-		which_transfer='relu',
-		n_epochs = 2000,
+		which_transfer = 'relu',
+		n_epochs = 200,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
-		n_types = -1, # set minimum 2 for task to make sense
+		n_types = 2, # set minimum 2 for class task to make sense
 		alpha = 5,
-		snap_freq = 20, # snapshot of net activity every snap_freq epochs
+		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False,
-		delay=4
+		delay=0
 	)
 
 	# parameters
@@ -195,7 +187,7 @@ if __name__ == "__main__":
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		model, results = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
+		model, results, token_to_type, token_to_set = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
 
 		print('SAVING FILES')
-		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results)
+		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results, token_to_type, token_to_set)

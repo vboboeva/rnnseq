@@ -286,9 +286,6 @@ class RNN (Net):
         if scaling is not None:
             self.init_weights (scaling)
 
-
-
-
     def init_weights(self, scaling, seed=None):
         
         if seed is not None:
