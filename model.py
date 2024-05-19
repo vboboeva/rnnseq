@@ -336,7 +336,7 @@ class RNN (Net):
         else:
             raise ValueError(
                 f"Invalid init option '{init}'\n" + \
-                 "Choose either 'sqrt', 'lin' or a float larger than 0")
+                 "Choose either 'Rich', 'Lazy', 'Const' or a float larger than 0")
         
         for name, pars in self.named_parameters():
             if "weight" in name:
