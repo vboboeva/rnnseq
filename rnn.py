@@ -121,7 +121,6 @@ def main(
 		for epoch in range(n_epochs + 1):
 			# print("X_train.shape (before) ", X_train.shape)
 			if epoch in epochs_snapshot:
-				print(epoch)
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
@@ -146,15 +145,13 @@ def main(
 
 if __name__ == "__main__":
 
-	_L=4
-	_m=2
-	params = loadtxt('params_L%d_m%d.txt'%(_L,_m))
-	# params = loadtxt("params_test.txt")
+	# params = loadtxt('params_L4_m2.txt')
+	params = loadtxt("params_fLN.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1,
-		L = 4,
+		# L = 4,
 		m = 2,
 		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
@@ -184,25 +181,27 @@ if __name__ == "__main__":
 	else:
 		transfer=True
 
-	lr_col_index = 0
-	n_hidden_col_index = 1
-	sim_datasplit_col_index = 2
-	sim_col_index = 3        
+	L_col_index = 0
+	lr_col_index = 1
+	n_hidden_col_index = 2
+	sim_datasplit_col_index = 3
+	sim_col_index = 4
 	index = int(sys.argv[1]) - 1
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 5
+	size = 30
 	for i in range(size):
 		row_index = index * size + i
+
+		L = int(params[row_index, L_col_index])
 		learning_rate = params[row_index, lr_col_index]
-		
 		n_hidden = int(params[row_index, n_hidden_col_index])
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
 		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s_cuesize%d_transferlearn%s' % (
-		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
+		main_kwargs['which_task'], n_hidden, L, main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
