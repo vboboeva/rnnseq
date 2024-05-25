@@ -77,7 +77,8 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
-	delay=0
+	delay=0,
+	cue_size=1
 	):
 
 	# Define loss functions
@@ -98,7 +99,7 @@ def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, inde
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
 			loss = loss_function(out[:-1], X[1:])
 
-			cue= [str(s) for s in token[:-1]] # put token[0] for cueing single letter
+			cue= [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
 
 			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
 			pred_seq = ''.join(pred_seq)

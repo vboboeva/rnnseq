@@ -56,6 +56,7 @@ def main(
 	weight_decay = 0.,
 	ablate=True,
 	delay=0
+	cue_size=1
 ):
 	print('TASK', which_task)
 	print('DATASPLIT NO', sim_datasplit)
@@ -165,6 +166,7 @@ if __name__ == "__main__":
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False,
 		delay=0
+		cue_size=1 # only used for prediction task: number of letters to cue net with
 	)
 
 	# parameters
