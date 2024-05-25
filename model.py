@@ -349,11 +349,11 @@ class RNN (Net):
                     std = init_f(f_in)
                     pars.data.normal_(0., std)
 
-        # check
-        for name, pars in self.named_parameters():
-            print(name, "\t", torch.max(pars - _pars_dict[name]))
-        exit()
-        # end check
+        # # check
+        # for name, pars in self.named_parameters():
+        #     print(name, "\t", torch.max(pars - _pars_dict[name]))
+        # exit()
+        # # end check
 
 
 

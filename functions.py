@@ -163,7 +163,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 	results['Whh']=[]
 	return results, token_to_type, token_to_set
 
-def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch):
+def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
 
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
@@ -181,7 +181,7 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
 
-				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay)
+				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				if which_task == 'Class':	
 					results['Retrieval'][token][epoch][idx_ablate]=Z
@@ -189,11 +189,6 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 					results['yh'][token][epoch][idx_ablate]=yh
 
 				if which_task == 'Pred':
-					# if (results['Retrieval'][Z][epoch][idx_ablate]) == []:
-					# 	results['Retrieval'][Z][epoch][idx_ablate]=[1]
-					# 	results['Loss'][Z][epoch][idx_ablate]=[loss]
-					# 	results['yh'][Z][epoch][idx_ablate]=[yh]
-					# else:
 					results['Retrieval'][Z][epoch][idx_ablate].append(1)
 					results['Loss'][Z][epoch][idx_ablate].append(loss)
 					results['yh'][Z][epoch][idx_ablate].append(yh)
@@ -206,12 +201,11 @@ def savefiles(output_folder_name, sim, which_task, model, results,  token_to_typ
 	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
 	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-	with open('%s/token_to_set_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
+	with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
 	    pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-	with open('%s/token_to_type_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
+	with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
 	    pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
 
 	# # Convert and write JSON object to file
 	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:

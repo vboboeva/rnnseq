@@ -24,9 +24,9 @@ from functions import *
 from train import train
 from train import test
 from model import RNN, LinearWeightDropout
-from quick_plot import plot_weights
-from quick_plot import plot_loss
-from quick_plot import plot_accuracy_ablation
+# from quick_plot import plot_weights
+# from quick_plot import plot_loss
+# from quick_plot import plot_accuracy_ablation
 
 
 ###########################################
@@ -56,7 +56,7 @@ def main(
 	drop_connect = 0.,
 	weight_decay = 0.,
 	ablate=True,
-	delay=0
+	delay=0,
 	cue_size=1
 ):
 	print('TASK', which_task)
@@ -104,7 +104,11 @@ def main(
 		to_freeze=to_freeze, which_init=which_init, layer_type=layer_type)
 	
 	# Set up the optimizer
-	optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
+	optimizer = optim.Adam(
+			model.parameters(),
+			# filter(lambda p: p.requires_grad, model.parameters()), # may not be necessary
+			lr=learning_rate, weight_decay=0,
+		)
 
 	# Set up the results dictionary
 	results, token_to_type, token_to_set = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
@@ -121,7 +125,7 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch)
+				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay, delay=delay)
 
@@ -152,7 +156,7 @@ if __name__ == "__main__":
 		n_layers = 1,
 		L = 4,
 		m = 2,
-		which_task = 'Pred',  # Specify task
+		which_task = 'Class',  # Specify task
 		which_objective = 'CE',
 		model_filename = 'model_state_datasplit3956437760_sim603726602.pth',
 		from_file = [], #, ['i2h', ['h2h']] 
@@ -163,13 +167,13 @@ if __name__ == "__main__":
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
-		n_types = 2, # set minimum 2 for class task to make sense
+		n_types = -1, # set minimum 2 for class task to make sense
 		alpha = 5,
 		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False,
-		delay=0
+		delay=4,
 		cue_size=1 # only used for prediction task: number of letters to cue net with
 	)
 
@@ -188,7 +192,7 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 1
+	size = 5
 	for i in range(size):
 		row_index = index * size + i
 		learning_rate = params[row_index, lr_col_index]
@@ -197,8 +201,8 @@ if __name__ == "__main__":
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s' % (
-		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'])
+		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s_cuesize%d_transferlearn%s' % (
+		main_kwargs['which_task'], n_hidden, main_kwargs['L'], main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
