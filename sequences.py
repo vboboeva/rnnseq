@@ -77,16 +77,23 @@ def findStructures(alphabet, L, whichm):
     '''
     templates_by_m = []
     for i, comp_list in enumerate(patterns_by_m):
-        # print("\nm = ", i+1)
+        # we cannot have m > |alphabet|
+        # exclude these combinations
+        m = i+1
+        if m > len(alphabet):
+            break
+        print("\nm = ", m)
         templates_list = []
         for comp in comp_list:
             template = ""
+            print("\t", comp)
             for j, n in enumerate(comp):
+                # print(j, n)
                 template += n*alphabet[j]
+            # exit()
             templates_list.append(template)
         templates_by_m.append(templates_list)
         # print(templates_list)
-
 
     '''
     Obtain all different types (up to replacement of symbols)
@@ -118,7 +125,7 @@ if __name__ == "__main__":
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 4
+    L = 8
     # Number of elements
     whichm = 2
     # Length of alphabet used

@@ -140,26 +140,48 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 	token_to_type = {}
 	token_to_set = {}
 
-	for measure in ['Loss', 'Retrieval', 'yh']:
-		results.update({measure:{}}) 
+	if which_task == 'Class':
+		for measure in ['Loss', 'Retrieval', 'yh']:
+			results.update({measure:{}}) 
 
-		for set_, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
+			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
 
-			tokens = [''.join(token) for token in tokens]
-		
-			for token, label in (zip(tokens, labels)):
-				token_to_set.update({token:set_}) 
-				token_to_type.update({token:label})
-
-				results[measure].update({token:{}})
-
-				for epoch in epochs_snapshot:
-					results[measure][token].update({epoch:{}})
-					results[measure][token][epoch].update({0:[]})
+				tokens = [''.join(token) for token in tokens]
 			
-					if ablate == True: 		
-						for unit_ablated in range(1, n_hidden+1):
-							results[measure][token][epoch].update({unit_ablated:[]})
+				for token, label in (zip(tokens, labels)):
+					token_to_set.update({token:set_}) 
+					token_to_type.update({token:label})
+
+					results[measure].update({token:{}})
+
+					for epoch in epochs_snapshot:
+						results[measure][token].update({epoch:{}})
+						results[measure][token][epoch].update({0:[]})
+				
+						if ablate == True: 		
+							for unit_ablated in range(1, n_hidden+1):
+								results[measure][token][epoch].update({unit_ablated:[]})
+
+	if which_task == 'Pred':
+		for measure in ['Retrieval', 'yh']:
+			results.update({measure:{}}) 
+
+			for set_, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
+
+				tokens = [''.join(token) for token in tokens]
+			
+				for token, label in (zip(tokens, labels)):
+					token_to_set.update({token:set_}) 
+					token_to_type.update({token:label})
+
+			for epoch in epochs_snapshot:
+				results[measure].update({epoch:{}})
+				results[measure][epoch].update({0:[]})
+				
+				if ablate == True: 		
+					for unit_ablated in range(1, n_hidden+1):
+						results[measure][epoch].update({unit_ablated:[]})
+
 	results['Whh']=[]
 	return results, token_to_type, token_to_set
 
@@ -181,19 +203,19 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
 
+				# For the classification task, Z is the output class. For the prediction task, Z is what has been predicted
 				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
-				if which_task == 'Class':	
-					results['Retrieval'][token][epoch][idx_ablate]=Z
+				if which_task == 'Class':
 					results['Loss'][token][epoch][idx_ablate]=loss
-					results['yh'][token][epoch][idx_ablate]=yh
+					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
+					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: (L, N)
 
 				if which_task == 'Pred':
-					results['Retrieval'][Z][epoch][idx_ablate].append(1)
-					results['Loss'][Z][epoch][idx_ablate].append(loss)
-					results['yh'][Z][epoch][idx_ablate].append(yh)
+					results['Retrieval'][epoch][idx_ablate].append(Z) # whether token Z has been retrieved
+					results['yh'][epoch][idx_ablate].append(yh)  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
 
-def savefiles(output_folder_name, sim, which_task, model, results,  token_to_type, token_to_set):
+def savefiles(output_folder_name, sim, which_task, model, results, token_to_type, token_to_set):
 	
 	# Save the model state
 	model.save('%s/model_state_sim%d.pth' % (output_folder_name, sim))

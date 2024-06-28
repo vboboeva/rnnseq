@@ -37,7 +37,7 @@ def main(
 	learning_rate, n_hidden, sim, sim_datasplit,
 	# network parameters
 	n_layers=1,
-	L = 4,
+	# L = 4,
 	m = 2,
 	which_task=None,
 	which_objective='CE',
@@ -62,6 +62,7 @@ def main(
 	print('TASK', which_task)
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
+	print('L=', L)
 
 	letter_to_index, index_to_letter = make_dicts(alpha)
 
@@ -146,31 +147,31 @@ def main(
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	params = loadtxt("params_fLN.txt")
+	params = loadtxt("params_test.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1,
 		# L = 4,
 		m = 2,
-		which_task = 'Class',  # Specify task
+		which_task = 'Pred',  # Specify task
 		which_objective = 'CE',
 		model_filename = 'model_state_datasplit3956437760_sim603726602.pth',
 		from_file = [], #, ['i2h', ['h2h']] 
 		to_freeze = [], #, ['i2h','h2h'] 
 		which_init = None,
 		which_transfer = 'relu',
-		n_epochs = 200,
+		n_epochs = 500,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
 		n_repeats = 1,
-		n_types = -1, # set minimum 2 for class task to make sense
+		n_types = 2, # set minimum 2 for class task to make sense
 		alpha = 5,
 		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.,
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False,
-		delay=4,
+		delay=0,
 		cue_size=1 # only used for prediction task: number of letters to cue net with
 	)
 
@@ -190,7 +191,7 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 30
+	size = 5
 	for i in range(size):
 		row_index = index * size + i
 

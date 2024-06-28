@@ -98,6 +98,7 @@ def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, inde
 			ht, hT, out = model.forward(X, mask=mask)
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
 			loss = loss_function(out[:-1], X[1:])
+			# CE between logits for retrieved sequence and token (input) -- NOT RELEVANT
 
 			cue= [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
 
