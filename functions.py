@@ -20,7 +20,7 @@ from pylab import rcParams
 import pickle
 import json
 
-from train import test
+from train import tokenwise_test
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -185,7 +185,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 	results['Whh']=[]
 	return results, token_to_type, token_to_set
 
-def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
+def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
 
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
@@ -204,7 +204,7 @@ def tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_trai
 				token = ''.join(token)
 
 				# For the classification task, Z is the output class. For the prediction task, Z is what has been predicted
-				Z, loss, yh = test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				if which_task == 'Class':
 					results['Loss'][token][epoch][idx_ablate]=loss

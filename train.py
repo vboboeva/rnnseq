@@ -74,7 +74,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	delay=0,

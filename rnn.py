@@ -22,7 +22,6 @@ import json
 
 from functions import * 
 from train import train
-from train import test
 from model import RNN, LinearWeightDropout
 # from quick_plot import plot_weights
 # from quick_plot import plot_loss
@@ -125,7 +124,7 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				tokenwise_test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 					
 			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay, delay=delay)
 
