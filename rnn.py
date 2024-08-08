@@ -22,7 +22,7 @@ import json
 
 from functions import * 
 from train import train
-from model import RNN, LinearWeightDropout
+from model import RNN, AE, LinearWeightDropout
 # from quick_plot import plot_weights
 # from quick_plot import plot_loss
 # from quick_plot import plot_accuracy_ablation
@@ -38,13 +38,14 @@ def main(
 	n_layers=1,
 	# L = 4,
 	m = 2,
-	which_task=None,
-	which_objective='CE',
+	modeltype='RNN',
+	task=None,
+	objective='CE',
 	model_filename=None, # string with parameters filename
 	from_file = [], # layers to set from file
 	to_freeze = [], # layers not to be updated 
-	which_init=None, # 'const', 'lazy', 'rich' 
-	which_transfer='relu',
+	init_weights=None, # 'const', 'lazy', 'rich' 
+	transfer_func='relu',
 	n_epochs=10,
 	batch_size=7,
 	frac_train=0.7,  # fraction of data to train net with
@@ -58,7 +59,7 @@ def main(
 	delay=0,
 	cue_size=1
 ):
-	print('TASK', which_task)
+	print('TASK', task)
 	print('DATASPLIT NO', sim_datasplit)
 	print('SIMULATION NO', sim)
 	print('L=', L)
@@ -85,9 +86,9 @@ def main(
 		'Class': num_types
 	}
 
-	output_size = task_to_output_size.get(which_task)
+	output_size = task_to_output_size.get(task)
 	if output_size is None:
-		raise ValueError(f"Invalid task: {which_task}")
+		raise ValueError(f"Invalid task: {task}")
 
 	# n_epochs for which take a snapshot of neural activity
 	epochs_snapshot = [snap_freq*i for i in range(0, int(n_epochs/snap_freq)+1)]
@@ -98,10 +99,16 @@ def main(
 		layer_type = nn.Linear
 
 	# Create the model
-	model = RNN(alpha, n_hidden, n_layers, output_size, 
-		nonlinearity=which_transfer, device=device, 
+	if modeltype == 'RNN':
+		model = RNN(alpha, n_hidden, n_layers, output_size, 
+		nonlinearity=transfer_func, device=device, 
 		model_filename=model_filename, from_file=from_file,
-		to_freeze=to_freeze, which_init=which_init, layer_type=layer_type)
+		to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+	else:
+		model = AE(alpha, n_hidden, n_layers, output_size, 
+		nonlinearity=transfer_func, device=device, 
+		model_filename=model_filename, from_file=from_file,
+		to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)		
 	
 	# Set up the optimizer
 	optimizer = optim.Adam(
@@ -111,12 +118,11 @@ def main(
 		)
 
 	# Set up the results dictionary
-	results, token_to_type, token_to_set = make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
-
+	results, token_to_type, token_to_set = make_results_dict(task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
 
 	print('TRAINING NETWORK')
 
-	if which_task in ['Pred', 'Class']:
+	if task in ['Pred', 'Class']:
 
 		for epoch in range(n_epochs + 1):
 			# print("X_train.shape (before) ", X_train.shape)
@@ -124,9 +130,9 @@ def main(
 				# COPY THE WEIGHTS WHEN YOU SAVE THEM
 				results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 					
-			train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task=which_task, weight_decay=weight_decay, delay=delay)
+			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task=task, weight_decay=weight_decay, delay=delay)
 
 			# After training: looking for motifs
 			# Hypo1()	
@@ -153,13 +159,14 @@ if __name__ == "__main__":
 		n_layers = 1,
 		# L = 4,
 		m = 2,
-		which_task = 'Pred',  # Specify task
-		which_objective = 'CE',
+		modeltype = 'AE', # choose btw 'RNN' and 'AE'
+		task = 'Pred',  # if model is 'RNN', choose btw 'Pred' and 'Class', if AE only 'Pred'
+		objective = 'CE',
 		model_filename = 'model_state_datasplit3956437760_sim603726602.pth',
 		from_file = [], #, ['i2h', ['h2h']] 
 		to_freeze = [], #, ['i2h','h2h'] 
-		which_init = None,
-		which_transfer = 'relu',
+		init_weights = None,
+		transfer_func = 'relu',
 		n_epochs = 500,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 0.7,
@@ -200,12 +207,11 @@ if __name__ == "__main__":
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s_cuesize%d_transferlearn%s' % (
-		main_kwargs['which_task'], n_hidden, L, main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['which_objective'], main_kwargs['which_init'],  main_kwargs['which_transfer'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
+		output_folder_name = 'model%s_task%s_N%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s_cuesize%d_transferlearn%s' % ( main_kwargs['modeltype'], main_kwargs['task'], n_hidden, L, main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
 		model, results, token_to_type, token_to_set = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
 
 		print('SAVING FILES')
-		savefiles(output_folder_name, sim, main_kwargs['which_task'], model, results, token_to_type, token_to_set)
+		savefiles(output_folder_name, sim, main_kwargs['task'], model, results, token_to_type, token_to_set)

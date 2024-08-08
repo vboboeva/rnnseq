@@ -263,19 +263,19 @@ class RNN (Net):
 
 		#     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
-		self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
+		self.i2h = layer_type(d_input, d_hidden, bias=bias)
 		if 'i2h' in to_freeze:
 			freeze(self.i2h)
 		if 'i2h' in from_file:
 			self._from_file += ['i2h.'+n for n,_ in self.i2h.named_parameters()]
 
-		self.h2h = layer_type (d_hidden, d_hidden, bias=bias)
+		self.h2h = layer_type(d_hidden, d_hidden, bias=bias)
 		if 'h2h' in to_freeze:
 			freeze(self.h2h)
 		if 'h2h' in from_file:
 			self._from_file += ['h2h.'+n for n,_ in self.h2h.named_parameters()]
 
-		self.h2o = nn.Linear (d_hidden, d_output, bias=bias)
+		self.h2o = layer_type(d_hidden, d_output, bias=bias)
 		if 'h2o' in to_freeze:
 			freeze(self.h2o)
 		if 'h2o' in from_file:

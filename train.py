@@ -28,10 +28,10 @@ loss_functions = {
 # 			train network 				 #
 ##########################################
 
-def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, which_task, weight_decay=0., delay=0):
+def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
 	# Define loss functions
-	loss_function = loss_functions[which_task][which_objective]
+	loss_function = loss_functions[task][objective]
 
 	n_train = X_train.shape[1]
 
@@ -50,11 +50,11 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 		# print(X_batch.shape)
 		# exit()
 
-		if which_task == 'Pred':
+		if task == 'Pred':
 			ht, hT, out_batch = model.forward(X_batch)
 			loss = loss_function(out_batch[:-1], X_batch[1:])
 		
-		elif which_task == 'Class':
+		elif task == 'Class':
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 			ht, hT, out_batch = model.forward(X_batch, delay=delay)
 			loss = loss_function(out_batch[-1], y_batch)
@@ -74,7 +74,7 @@ def train(X_train, y_train, model, optimizer, which_objective, L, n_batches, bat
 ##########################################
 
 
-def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task,
+def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, objective, task,
 	n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	delay=0,
@@ -82,7 +82,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 	):
 
 	# Define loss functions
-	loss_function = loss_functions[which_task][which_objective]
+	loss_function = loss_functions[task][objective]
 
 	model.eval()
 	with torch.no_grad():
@@ -93,7 +93,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 		if idx_ablate != 0:
 			mask[idx_ablate-1] = 0
 		
-		if which_task == 'Pred':
+		if task == 'Pred':
 
 			ht, hT, out = model.forward(X, mask=mask)
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
@@ -106,7 +106,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 			pred_seq = ''.join(pred_seq)
 			metric = pred_seq
 
-		elif which_task == 'Class':
+		elif task == 'Class':
 			y = y.to(model.device)
 			ht, hT, out = model.forward(X, mask=mask, delay=delay)
 			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
