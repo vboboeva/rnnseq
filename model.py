@@ -455,7 +455,6 @@ class RNNEncoder(nn.Module):
 
 	def forward(self, x):
 		# x: (batch_size, sequence_length, d_input)
-		x=x.unsqueeze(0)
 		_, h_n = self.rnn(x)  
 		# h_n: (num_layers, batch_size, d_hidden)
 		h_n = h_n[-1, :, :]  # Take the last layer's hidden state (batch_size, d_hidden)

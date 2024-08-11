@@ -12,15 +12,19 @@ from itertools import product
 
 
 loss_functions = {
-	'Pred': {
+	'RNNPred': {
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
 		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).view(-1, output.shape[-1]), torch.argmax(target,dim=-1).view(-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	},
-	'Class': {
+	'RNNClass': {
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
 		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
+	},
+	'RNNAuto': {
+	'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
+	'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	}
 }
 
@@ -30,6 +34,7 @@ loss_functions = {
 
 def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
+	print('Training')
 	# Define loss functions
 	loss_function = loss_functions[task][objective]
 
@@ -47,17 +52,22 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 		batch_end = (batch + 1) * batch_size
 
 		X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
-		# print(X_batch.shape)
-		# exit()
 
-		if task == 'Pred':
-			ht, hT, out_batch = model.forward(X_batch)
+		if task == 'RNNPred':
+			ht, out_batch = model.forward(X_batch)
 			loss = loss_function(out_batch[:-1], X_batch[1:])
 		
-		elif task == 'Class':
+		elif task == 'RNNClass':
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-			ht, hT, out_batch = model.forward(X_batch, delay=delay)
+			ht, out_batch = model.forward(X_batch, delay=delay)
 			loss = loss_function(out_batch[-1], y_batch)
+
+		elif task == 'RNNAuto':
+			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
+			X_batch = X_batch.permute(1,0,-1)
+			ht, out_batch = model.forward(X_batch)
+			X_batch = X_batch.squeeze(0)
+			loss = loss_function(out_batch, X_batch)
 
 		# # adding L1 regularization to the loss
 		# if weight_decay > 0.:
@@ -66,7 +76,9 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 
 		loss.backward()
 		optimizer.step()
-
+	
+	print(out_batch)
+	print(X_batch)
 	return 
 
 ##########################################
@@ -81,6 +93,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 	cue_size=1
 	):
 
+
 	# Define loss functions
 	loss_function = loss_functions[task][objective]
 
@@ -93,29 +106,34 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 		if idx_ablate != 0:
 			mask[idx_ablate-1] = 0
 		
-		if task == 'Pred':
-
-			ht, hT, out = model.forward(X, mask=mask)
+		if task == 'RNNPred':
+			ht, out = model.forward(X, mask=mask)
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
-			loss = loss_function(out[:-1], X[1:])
-			# CE between logits for retrieved sequence and token (input) -- NOT RELEVANT
 
-			cue= [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
+			cue = [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
 
 			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
 			pred_seq = ''.join(pred_seq)
-			metric = pred_seq
+			goodness_test = pred_seq 
 
-		elif task == 'Class':
+		elif task == 'RNNClass':
 			y = y.to(model.device)
-			ht, hT, out = model.forward(X, mask=mask, delay=delay)
+			ht, out = model.forward(X, mask=mask, delay=delay)
 			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
 			loss = loss_function(out[-1], y)   
 			label = torch.argmax(y, dim=-1)
 			predicted = torch.argmax(out[-1], dim=-1)
-			metric = np.array(predicted)
+			goodness_test = np.array(predicted)
 
-	return metric, loss.item(), ht.detach().cpu().numpy()
+		elif task == 'RNNAuto':
+			ht, out = model.forward(X.unsqueeze(0), mask=mask)
+			loss = loss_function(out, X)
+
+			label = X
+			predicted = torch.argmax(out, dim=-1)	
+			goodness_test = np.array(predicted)
+
+	return goodness_test, loss.item(), ht.detach().cpu().numpy()
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_letters):
 	with torch.no_grad():
@@ -129,7 +147,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 				x[k,:] = F.one_hot(torch.tensor(p), alpha)
 			# y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
 			# x has to have dimensions (L, sizetrain, alpha)
-			_, _, y_pred = model.forward(x) #.permute(1,0,2)
+			_, y_pred = model.forward(x) #.permute(1,0,2)
 
 			# last_letter_logits has dimension alpha
 			last_letter_logits = y_pred[-1,:]
