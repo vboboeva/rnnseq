@@ -19,22 +19,22 @@ import functools
 
 
 # class RNN(nn.Module):
-#     def __init__(self, input_num_units, hidden_num_units, num_layers, output_num_units, 
+#     def __init__(self, d_input, d_hidden, num_layers, d_output, 
 #         nonlinearity="tanh", device="cpu", which_init=None):
 
 #         super(RNN, self).__init__()
 
 #         # Defining the number of layers and the nodes in each layer
-#         self.hidden_num_units = hidden_num_units
-#         self.input_num_units = input_num_units
-#         self.output_num_units = output_num_units
+#         self.d_hidden = d_hidden
+#         self.d_input = d_input
+#         self.d_output = d_output
 #         self.num_layers = num_layers
 
 #         # RNN layer
-#         self.rnn = nn.RNN(input_num_units, hidden_num_units, num_layers, nonlinearity=nonlinearity)
+#         self.rnn = nn.RNN(d_input, d_hidden, num_layers, nonlinearity=nonlinearity)
 
 #         # Fully connected layer
-#         self.fc = nn.Linear(hidden_num_units, output_num_units)
+#         self.fc = nn.Linear(d_hidden, d_output)
 
 #         self.device = device
 #         self.to(self.device)
@@ -78,23 +78,23 @@ import functools
 #         '''
 #         x
 #         ---
-#         seq_length, input_num_units
+#         seq_length, d_input
 #         '''
 
 #         '''
 #         h0 -- initial network state
 #         ---
-#         num_layers, batch_size, hidden_num_units
+#         num_layers, batch_size, d_hidden
 #         or
-#         num_layers, hidden_num_units
+#         num_layers, d_hidden
 #         '''
 
 #         if len(x.shape) == 2:
-#             # h0 = torch.randn(self.num_layers, self.hidden_num_units).to(self.device)
-#             h0 = torch.zeros(self.num_layers, self.hidden_num_units).to(self.device)
+#             # h0 = torch.randn(self.num_layers, self.d_hidden).to(self.device)
+#             h0 = torch.zeros(self.num_layers, self.d_hidden).to(self.device)
 #         elif len(x.shape) == 3:
-#             # h0 = torch.randn(self.num_layers, x.shape[1], self.hidden_num_units).to(self.device)
-#             h0 = torch.zeros(self.num_layers, x.shape[1], self.hidden_num_units).to(self.device)
+#             # h0 = torch.randn(self.num_layers, x.shape[1], self.d_hidden).to(self.device)
+#             h0 = torch.zeros(self.num_layers, x.shape[1], self.d_hidden).to(self.device)
 
 #         # ht = sequence of hidden states
 #         # hT = last hidden state
@@ -132,8 +132,6 @@ import functools
 #             y = ht.permute(1,0,2) # y is of size num_tokens (train/test) x L x N 
 
 #         return y
-
-
 
 
 ############################################################################
@@ -227,7 +225,7 @@ class RNN (Net):
 			drop_l=None,
 			nonlinearity='relu',
 			layer_type=nn.Linear,
-			which_init=None,
+			init_weights=None,
 			model_filename=None, # file with model parameters
 			to_freeze = [], # parameters to keep frozen; list with elements in ['i2h', 'h2h', 'h2o']
 			from_file = [], # parameters to set from file; list with elements in ['i2h', 'h2h', 'h2o']
@@ -237,7 +235,7 @@ class RNN (Net):
 		):
 
 		super(RNN, self).__init__()
-		init=which_init
+		init=init_weights
 		self._from_file = []
 		self._model_filename=model_filename
 
@@ -361,9 +359,9 @@ class RNN (Net):
 		'''
 		x
 		---
-		seq_length, batch_size, input_num_units
+		seq_length, batch_size, d_input
 		or
-		seq_length, input_num_units
+		seq_length, d_input
 		'''
 
 		# print("x.shape (input) ", x.shape)
@@ -429,9 +427,9 @@ class RNN (Net):
 
 		y = self.h2o(hidden)
 
-		hT = torch.reshape(hidden[-1], (1, *hidden.shape[1:]))
+		# hT = torch.reshape(hidden[-1], (1, *hidden.shape[1:]))
 
-		return hidden, hT, y
+		return hidden, y
 
 	def get_activity(self, x):
 
@@ -449,11 +447,60 @@ class RNN (Net):
 		return y
 
 
-# if __name__ == "__main__":
+class RNNEncoder(nn.Module):
+	def __init__(self, d_input, d_hidden, d_latent, num_layers):
+		super(RNNEncoder, self).__init__()
+		self.rnn = nn.RNN(d_input, d_hidden, num_layers, batch_first=True)
+		self.hidden_to_latent = nn.Linear(d_hidden, d_latent)
 
-#     rnn = RNN(4, 8, 1, 3)
+	def forward(self, x):
+		# x: (batch_size, sequence_length, d_input)
+		x=x.unsqueeze(0)
+		_, h_n = self.rnn(x)  
+		# h_n: (num_layers, batch_size, d_hidden)
+		h_n = h_n[-1, :, :]  # Take the last layer's hidden state (batch_size, d_hidden)
+		latent = self.hidden_to_latent(h_n)  # latent: (batch_size, d_latent)
+		return latent
 
-#     x = torch.randn(2, 5, 4)
-#     print("x", x)
+class RNNDecoder(nn.Module):
+    def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
+        super(RNNDecoder, self).__init__()
+        self.rnn = nn.RNN(d_latent, d_hidden, num_layers, batch_first=True)  # RNN: d_latent -> d_hidden
+        self.hidden_to_output = nn.Linear(d_hidden, d_output)  # Hidden to output
+        self.sequence_length = sequence_length
 
-#     rnn.forward(x)
+    def forward(self, latent):
+        # Expand the latent vector to match the sequence length
+        latent_expanded = latent.unsqueeze(1).repeat(1, self.sequence_length, 1)
+        rnn_out, _ = self.rnn(latent_expanded)
+        output = self.hidden_to_output(rnn_out)
+        return output
+
+class RNNAutoencoder(nn.Module):
+	def __init__(self, d_input, d_hidden, num_layers, d_latent, sequence_length, device="cpu"):
+		super(RNNAutoencoder, self).__init__()
+		print(d_input, d_hidden, d_latent, num_layers)
+
+		self.d_input = d_input
+		self.d_hidden = d_hidden
+		self.d_latent = d_latent
+		self.num_layers = num_layers
+		self.sequence_length = num_layers
+		self.device = device
+
+		self.encoder = RNNEncoder(d_input, d_hidden, d_latent, num_layers)
+		self.decoder = RNNDecoder(d_latent, d_hidden, d_input, num_layers, sequence_length)
+
+	def forward(self, x, mask=None):
+		if mask is not None:
+			assert isinstance(mask, torch.Tensor) and mask.shape == (self.d_hidden,), \
+				f"`mask` must be a 1D torch tensor with the same size as the hidden layer"
+			mask = mask.to(self.device)
+			_masking = lambda h: h * mask[None,:]
+		else:
+			_masking = lambda h: h
+
+		latent = self.encoder(x)
+		reconstructed = self.decoder(latent).squeeze(0)
+
+		return latent, reconstructed
