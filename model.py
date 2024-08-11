@@ -450,35 +450,38 @@ class RNN (Net):
 class RNNEncoder(nn.Module):
 	def __init__(self, d_input, d_hidden, d_latent, num_layers):
 		super(RNNEncoder, self).__init__()
+		# RNN: d_input -> d_hidden
 		self.rnn = nn.RNN(d_input, d_hidden, num_layers, batch_first=True)
-		self.hidden_to_latent = nn.Linear(d_hidden, d_latent)
+		self.hidden_to_latent = nn.Linear(d_hidden, d_latent) # Hidden to latent
 
 	def forward(self, x):
 		# x: (batch_size, sequence_length, d_input)
-		_, h_n = self.rnn(x)  
-		# h_n: (num_layers, batch_size, d_hidden)
-		h_n = h_n[-1, :, :]  # Take the last layer's hidden state (batch_size, d_hidden)
-		latent = self.hidden_to_latent(h_n)  # latent: (batch_size, d_latent)
+		# output: (batch_size, sequence_length, d_hidden)
+		# h: (num_layers, batch_size, d_hidden)
+		rnn_out, h = self.rnn(x)  
+		h = h[-1, :, :]
+		latent = self.hidden_to_latent(h)  # latent: (batch_size, d_latent)
 		return latent
 
 class RNNDecoder(nn.Module):
-    def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
-        super(RNNDecoder, self).__init__()
-        self.rnn = nn.RNN(d_latent, d_hidden, num_layers, batch_first=True)  # RNN: d_latent -> d_hidden
-        self.hidden_to_output = nn.Linear(d_hidden, d_output)  # Hidden to output
-        self.sequence_length = sequence_length
+	def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
+		super(RNNDecoder, self).__init__()
+		# RNN: d_latent -> d_hidden
+		self.rnn = nn.RNN(d_latent, d_hidden, num_layers, batch_first=True)  
+		self.hidden_to_output = nn.Linear(d_hidden, d_output)  # Hidden to output
+		self.sequence_length = sequence_length
 
-    def forward(self, latent):
-        # Expand the latent vector to match the sequence length
-        latent_expanded = latent.unsqueeze(1).repeat(1, self.sequence_length, 1)
-        rnn_out, _ = self.rnn(latent_expanded)
-        output = self.hidden_to_output(rnn_out)
-        return output
+	def forward(self, latent):
+		# Expand the latent vector to match the sequence length
+		latent_expanded = latent.unsqueeze(1).repeat(1, self.sequence_length, 1)
+		rnn_out, h = self.rnn(latent_expanded)
+		output = self.hidden_to_output(rnn_out)
+		return output
 
 class RNNAutoencoder(nn.Module):
 	def __init__(self, d_input, d_hidden, num_layers, d_latent, sequence_length, device="cpu"):
 		super(RNNAutoencoder, self).__init__()
-		print(d_input, d_hidden, d_latent, num_layers)
+		# print(d_input, d_hidden, d_latent, num_layers)
 
 		self.d_input = d_input
 		self.d_hidden = d_hidden
@@ -500,6 +503,15 @@ class RNNAutoencoder(nn.Module):
 			_masking = lambda h: h
 
 		latent = self.encoder(x)
-		reconstructed = self.decoder(latent).squeeze(0)
+		reconstructed = self.decoder(latent)
 
 		return latent, reconstructed
+
+	def save(self, filename):
+		torch.save(self.state_dict(), filename)
+
+	def load(self, filename):
+		self.load_state_dict(torch.load(filename, map_location=self.device))
+
+	def __len__ (self):
+		return len(self._modules.items())

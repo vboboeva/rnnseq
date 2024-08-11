@@ -34,7 +34,7 @@ loss_functions = {
 
 def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
-	print('Training')
+	# print('Training')
 	# Define loss functions
 	loss_function = loss_functions[task][objective]
 
@@ -76,9 +76,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 
 		loss.backward()
 		optimizer.step()
-	
-	print(out_batch)
-	print(X_batch)
+	print(loss.item())
 	return 
 
 ##########################################
@@ -127,7 +125,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 
 		elif task == 'RNNAuto':
 			ht, out = model.forward(X.unsqueeze(0), mask=mask)
-			loss = loss_function(out, X)
+			loss = loss_function(out, X.unsqueeze(0))
 
 			label = X
 			predicted = torch.argmax(out, dim=-1)	
