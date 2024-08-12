@@ -66,7 +66,11 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 			X_batch = X_batch.permute(1,0,-1)
 			ht, out_batch = model.forward(X_batch)
-			X_batch = X_batch.squeeze(0)
+			# print(out_batch.shape)
+			# print(X_batch.shape)
+			# exit()
+
+			# X_batch = X_batch.squeeze(0)
 			loss = loss_function(out_batch, X_batch)
 
 		# # adding L1 regularization to the loss
@@ -76,7 +80,6 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 
 		loss.backward()
 		optimizer.step()
-	print(loss.item())
 	return 
 
 ##########################################
@@ -90,8 +93,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 	delay=0,
 	cue_size=1
 	):
-
-
+	
 	# Define loss functions
 	loss_function = loss_functions[task][objective]
 
@@ -107,12 +109,14 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 		if task == 'RNNPred':
 			ht, out = model.forward(X, mask=mask)
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
+			loss = loss_function(out[:-1], X[1:])
+			# CE between logits for retrieved sequence and token (input) -- NOT RELEVANT
 
 			cue = [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
 
-			pred_seq = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
-			pred_seq = ''.join(pred_seq)
-			goodness_test = pred_seq 
+			predicted = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
+			predicted = ''.join(predicted)
+			# print(predicted)
 
 		elif task == 'RNNClass':
 			y = y.to(model.device)
@@ -121,17 +125,19 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 			loss = loss_function(out[-1], y)   
 			label = torch.argmax(y, dim=-1)
 			predicted = torch.argmax(out[-1], dim=-1)
-			goodness_test = np.array(predicted)
+			predicted = np.array([predicted])[0]
+			# print(predicted)
 
 		elif task == 'RNNAuto':
 			ht, out = model.forward(X.unsqueeze(0), mask=mask)
 			loss = loss_function(out, X.unsqueeze(0))
+			label = torch.argmax(X.squeeze(0), dim=-1)
+			predicted = np.array(torch.argmax(out.squeeze(0), dim=-1))
+			predicted = [index_to_letter[i] for i in predicted]
+			predicted = ''.join(predicted)
+			# print(predicted)
 
-			label = X
-			predicted = torch.argmax(out, dim=-1)	
-			goodness_test = np.array(predicted)
-
-	return goodness_test, loss.item(), ht.detach().cpu().numpy()
+	return predicted, loss.item(), ht.detach().cpu().numpy()
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_letters):
 	with torch.no_grad():

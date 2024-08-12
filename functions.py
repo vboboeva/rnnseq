@@ -117,6 +117,7 @@ def make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, al
 
 	num_types = int(len(all_tokens) / num_tokens_onetype)
 	n_train_type = n_train // num_types
+
 	train_ids = ids[:, :n_train_type].reshape(-1)
 	test_ids = ids[:, n_train_type:].reshape(-1)
 
@@ -140,7 +141,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 	token_to_type = {}
 	token_to_set = {}
 
-	if which_task == 'Class':
+	if which_task == 'RNNClass':
 		for measure in ['Loss', 'Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
@@ -162,7 +163,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 							for unit_ablated in range(1, n_hidden+1):
 								results[measure][token][epoch].update({unit_ablated:[]})
 
-	if which_task == 'Pred':
+	if which_task == 'RNNPred':
 		for measure in ['Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
@@ -182,11 +183,34 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 					for unit_ablated in range(1, n_hidden+1):
 						results[measure][epoch].update({unit_ablated:[]})
 
+
+	if which_task == 'RNNAuto':
+		for measure in ['Loss', 'Retrieval', 'yh']:
+			results.update({measure:{}}) 
+
+			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+
+				tokens = [''.join(token) for token in tokens]
+			
+				for token, label in (zip(tokens, labels)):
+					token_to_set.update({token:set_}) 
+					token_to_type.update({token:label})
+
+					results[measure].update({token:{}})
+
+					for epoch in epochs_snapshot:
+						results[measure][token].update({epoch:{}})
+						results[measure][token][epoch].update({0:[]})
+				
+						if ablate == True: 		
+							for unit_ablated in range(1, n_hidden+1):
+								results[measure][token][epoch].update({unit_ablated:[]})
+
 	results['Whh']=[]
 	return results, token_to_type, token_to_set
 
 def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
-
+	# print('Testing')
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
 		X = X.permute((1,0,2))
@@ -206,14 +230,21 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				# For the classification task, Z is the output class. For the prediction task, Z is what has been predicted
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
-				if which_task == 'Class':
+				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate]=loss
 					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
 					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: (L, N)
+					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				if which_task == 'Pred':
+				if which_task == 'RNNPred':
 					results['Retrieval'][epoch][idx_ablate].append(Z) # whether token Z has been retrieved
 					results['yh'][epoch][idx_ablate].append(yh)  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
+					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
+
+				if which_task == 'RNNAuto':
+					results['Loss'][token][epoch][idx_ablate]=loss
+					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
+					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: (L, N)
 
 def savefiles(output_folder_name, sim, which_task, model, results, token_to_type, token_to_set):
 	
