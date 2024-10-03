@@ -23,8 +23,8 @@ loss_functions = {
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	},
 	'RNNAuto': {
-	'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
-	'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).permute(0,2,1), target, reduction="mean"),
+		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	}
 }
 
@@ -66,12 +66,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 			X_batch = X_batch.permute(1,0,-1)
 			ht, out_batch = model.forward(X_batch)
-			# print(out_batch.shape)
-			# print(X_batch.shape)
-			# exit()
-
-			# X_batch = X_batch.squeeze(0)
-			loss = loss_function(out_batch, X_batch)
+			loss = loss_function(out_batch, torch.argmax(X_batch, dim=-1))
 
 		# # adding L1 regularization to the loss
 		# if weight_decay > 0.:
@@ -130,7 +125,8 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 
 		elif task == 'RNNAuto':
 			ht, out = model.forward(X.unsqueeze(0), mask=mask)
-			loss = loss_function(out, X.unsqueeze(0))
+			target = torch.argmax(X.unsqueeze(0), dim=-1)
+			loss = loss_function(out, target)
 			label = torch.argmax(X.squeeze(0), dim=-1)
 			predicted = np.array(torch.argmax(out.squeeze(0), dim=-1))
 			predicted = [index_to_letter[i] for i in predicted]
