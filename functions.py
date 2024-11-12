@@ -227,24 +227,27 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
 
-				# For the classification task, Z is the output class. For the prediction task, Z is what has been predicted
+				# For the classification task, Z is the output class
+				# For the prediction task, Z is what has been predicted
+				# For reconstruction task, Z is the reconstructed sequence
+
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate]=loss
 					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
-					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: (L, N)
+					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: L by n_hidden
 					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				if which_task == 'RNNPred':
-					results['Retrieval'][epoch][idx_ablate].append(Z) # whether token Z has been retrieved
+				elif which_task == 'RNNPred':
+					results['Retrieval'][epoch][idx_ablate].append(Z) # which token retrieved (Z)
 					results['yh'][epoch][idx_ablate].append(yh)  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
 					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
-				if which_task == 'RNNAuto':
+				elif which_task == 'RNNAuto':
 					results['Loss'][token][epoch][idx_ablate]=loss
-					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
-					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: (L, N)
+					results['Retrieval'][token][epoch][idx_ablate]=Z # how input token was reconstructed
+					results['yh'][token][epoch][idx_ablate]=yh	 # latent layer activity throughout sequence: n_latent
 
 def savefiles(output_folder_name, sim, which_task, model, results, token_to_type, token_to_set):
 	
