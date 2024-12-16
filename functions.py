@@ -203,14 +203,14 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 						results[measure][token][epoch].update({0:[]})
 				
 						if ablate == True: 		
-							for unit_ablated in range(1, n_hidden+1):
+							for unit_ablated in range(1, n_hidden + 1):
 								results[measure][token][epoch].update({unit_ablated:[]})
 
 	results['Whh']=[]
 	return results, token_to_type, token_to_set
 
 def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
-	# print('Testing')
+
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
 		X = X.permute((1,0,2))
@@ -226,6 +226,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
+				# print('target', token)
 
 				# For the classification task, Z is the output class
 				# For the prediction task, Z is what has been predicted
@@ -247,7 +248,8 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				elif which_task == 'RNNAuto':
 					results['Loss'][token][epoch][idx_ablate]=loss
 					results['Retrieval'][token][epoch][idx_ablate]=Z # how input token was reconstructed
-					results['yh'][token][epoch][idx_ablate]=yh	 # latent layer activity throughout sequence: n_latent
+					yh_unsqueezed=np.expand_dims(yh, axis=0)
+					results['yh'][token][epoch][idx_ablate]=yh_unsqueezed # latent layer activity throughout sequence: n_latent
 
 def savefiles(output_folder_name, sim, which_task, model, results, token_to_type, token_to_set):
 	
