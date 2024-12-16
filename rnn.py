@@ -92,7 +92,7 @@ def main(
 		raise ValueError(f"Invalid task: {task}")
 
 	# n_epochs for which take a snapshot of neural activity
-	epochs_snapshot = [snap_freq*i for i in range(0, int(n_epochs/snap_freq)+1)]
+	epochs_snapshot = np.arange(0, int(n_epochs)+1, snap_freq)
 
 	if drop_connect != 0.:
 		layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
@@ -130,8 +130,10 @@ def main(
 			if epoch in epochs_snapshot:
 
 				# Forward pass
+				# print('testing')
 				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
+			# print('training')
 			# Backward pass and optimization
 			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
 
@@ -157,24 +159,24 @@ def main(
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	params = loadtxt("params_test.txt")
+	params = loadtxt("params.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1,
-		n_latent = 7,
+		n_latent = 20,
 		# L = 4,
 		m = 2,
 		task = 'RNNAuto',  # choose btw 'RNNPred' and 'RNNClass', and RNNAuto
-		objective = 'MSE',
-		model_filename = 'model_state_datasplit3956437760_sim603726602.pth',
-		from_file = [], #, ['i2h', ['h2h']] 
-		to_freeze = [], #, ['i2h','h2h'] 
+		objective = 'CE',
+		model_filename = 'model_state_datasplit0_sim0.pth',
+		from_file = [], # ['i2h', ['h2h']], 
+		to_freeze = [], # ['i2h','h2h'], 
 		init_weights = None,
 		transfer_func = 'relu',
-		n_epochs = 200,
+		n_epochs = 100,
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 0.7,
+		frac_train = 0.8,
 		n_repeats = 1,
 		n_types = -1, # set minimum 2 for class task to make sense
 		alpha = 5,
@@ -202,7 +204,7 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 5
+	size = 25
 	for i in range(size):
 		row_index = index * size + i
 
@@ -212,7 +214,7 @@ if __name__ == "__main__":
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
 
-		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_obj%s_init%s_transfer%s_datasplit%s_delay%d_ablate%s_cuesize%d_transferlearn%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], sim_datasplit, main_kwargs['delay'], main_kwargs['ablate'], main_kwargs['cue_size'], transfer)
+		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_nepochs%d_lr%.5f_bs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['n_epochs'], learning_rate, main_kwargs['batch_size'], main_kwargs['n_types'], main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], sim_datasplit )
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
