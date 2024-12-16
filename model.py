@@ -151,7 +151,7 @@ class LinearWeightDropout(nn.Linear):
 
 	def forward(self, input):
 		new_weight = (torch.rand((input.shape[0], *self.weight.shape), device=input.device) > self.drop_p) * self.weight[None, :, :]
-		output = torch.bmm(new_weight, input[:, :, None])[:, :, 0] / (1 - self.drop_p)
+		output = torch.bmm(new_weight, input[:, :, None])[:, :, 0] / (1. - self.drop_p)
 		if self.bias is None:
 			return output
 		return output + self.bias
@@ -178,8 +178,6 @@ class Net(nn.Module):
 
 			if "weight" in name:
 				f_in = 1.*pars.data.size()[1]
-				print('f_in', f_in)
-				exit()
 				if scaling == "lin":
 					# initialisation of the weights -- N(0, 1/n)
 					init_f = lambda f_in: (0., 1./f_in)
@@ -261,7 +259,7 @@ class RNN (Net):
 
 		#     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
-		self.i2h = layer_type(d_input, d_hidden, bias=bias)
+		self.i2h = layer_type(d_input, d_hidden, bias=0)
 		if 'i2h' in to_freeze:
 			freeze(self.i2h)
 		if 'i2h' in from_file:
@@ -273,7 +271,7 @@ class RNN (Net):
 		if 'h2h' in from_file:
 			self._from_file += ['h2h.'+n for n,_ in self.h2h.named_parameters()]
 
-		self.h2o = layer_type(d_hidden, d_output, bias=bias)
+		self.h2o = layer_type(d_hidden, d_output, bias=0)
 		if 'h2o' in to_freeze:
 			freeze(self.h2o)
 		if 'h2o' in from_file:
@@ -353,8 +351,6 @@ class RNN (Net):
 		# exit()
 		# # end check
 
-
-
 	def forward(self, x, mask=None, delay=0):
 		'''
 		x
@@ -392,6 +388,15 @@ class RNN (Net):
 			x = torch.reshape(x, (x.shape[0], 1, x.shape[1]) )
 		# print("x.shape (reshaped) ", x.shape)
 
+		# pad input with 0 along the time axis for `delay` time steps
+
+		if delay != 0:
+			assert isinstance(delay, int), "delay must be an integer"
+			x = torch.cat([x, torch.zeros((delay,*x.shape[1:]))], dim=0)
+			# x = torch.cat([x, torch.zeros((x.shape[0], delay, x.shape[-1]))], dim=1)
+
+			_shape = _shape[0]+delay, *_shape[1:]
+
 		# initialization of net        
 		# h0 = torch.randn(x.shape[1], self.d_hidden)
 		h0 = torch.zeros(x.shape[1], self.d_hidden)
@@ -399,37 +404,31 @@ class RNN (Net):
 		# batch_size, n_hidden
 		ht = _masking(h0)
 		hidden = []
-		
-		# pad input with 0 along the time axis for `delay` time steps
-		if delay != 0:
-			assert isinstance(delay, int), "delay must be an integer"
-			x = torch.cat([x, torch.zeros((delay,*x.shape[1:]))], dim=0)
-			_shape = _shape[0]+delay, *_shape[1:]
 
 		# t is the sequence of time-steps
 		for t, xt in enumerate(x):
 
 			# xt = batch_size, n_input
-			# _input_weights = n_hidden, n_input
 			# zt = batch_size, n_hidden
 
 			# process input to feed into recurrent network
 			zi = self.i2h (xt)
-
 			zh = self.h2h (ht)
 			z = self.phi (zh + zi)
-			z = _masking( z )
+			z = _masking(z)
 
 			hidden.append(z)
 			ht = z 
 
+		# print('before', np.shape(hidden))
 		hidden = torch.reshape(torch.stack(hidden), _shape)
+		# print('after', np.shape(hidden))
 
-		y = self.h2o(hidden)
+		output = self.h2o(hidden)
+		# print('outputshape', np.shape(output))
+		# exit()
 
-		# hT = torch.reshape(hidden[-1], (1, *hidden.shape[1:]))
-
-		return hidden, y
+		return hidden, output
 
 	def get_activity(self, x):
 
@@ -446,36 +445,43 @@ class RNN (Net):
 
 		return y
 
-
 class RNNEncoder(nn.Module):
 	def __init__(self, d_input, d_hidden, d_latent, num_layers):
 		super(RNNEncoder, self).__init__()
-		# RNN: d_input -> d_hidden
-		self.rnn = nn.RNN(d_input, d_hidden, num_layers, batch_first=True)
-		self.hidden_to_latent = nn.Linear(d_hidden, d_latent) # Hidden to latent
+		# RNN: d_input -> d_latent
+		self.rnn = RNN(d_input, d_hidden, num_layers, d_latent)
 
-	def forward(self, x):
-		# x: (batch_size, sequence_length, d_input)
-		# output: (batch_size, sequence_length, d_hidden)
+	def forward(self, x, delay=0):
+		# x: (sequence_length, batch_size, d_input) 
+		# output: (sequence_length, batch_size, d_hidden)
 		# h: (num_layers, batch_size, d_hidden)
-		rnn_out, h = self.rnn(x)  
-		h = h[-1, :, :]
-		latent = self.hidden_to_latent(h)  # latent: (batch_size, d_latent)
-		return latent
+		rnn_out, latent = self.rnn(x, delay=delay)
+		# return activity of latent layer 
+		return latent[-1]
 
 class RNNDecoder(nn.Module):
 	def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
 		super(RNNDecoder, self).__init__()
-		# RNN: d_latent -> d_hidden
-		self.rnn = nn.RNN(d_latent, d_hidden, num_layers, batch_first=True)  
-		self.hidden_to_output = nn.Linear(d_hidden, d_output)  # Hidden to output
+		# RNN: d_latent -> d_output
+
+		self.rnn = RNN(d_latent, d_hidden, num_layers, d_output) 
 		self.sequence_length = sequence_length
 
-	def forward(self, latent):
-		# Expand the latent vector to match the sequence length
-		latent_expanded = latent.unsqueeze(1).repeat(1, self.sequence_length, 1)
-		rnn_out, h = self.rnn(latent_expanded)
-		output = self.hidden_to_output(rnn_out)
+	def forward(self, latent, delay=0):
+		'''
+		latent is either
+		- (batch_dim, d_latent)
+		or
+		- (d_latent,)
+		'''
+		# repeat latent vector as many as sequence length
+		latent_expanded = latent.unsqueeze(0).expand(self.sequence_length, *[-1] * latent.dim())
+
+		# Expand the latent vector to match the sequence length, fill with zeros
+		# filled_tensor = torch.zeros_like(latent_expanded)
+		# filled_tensor[0,:] = latent
+
+		rnn_out, output = self.rnn(latent_expanded, delay=0)
 		return output
 
 class RNNAutoencoder(nn.Module):
@@ -487,13 +493,15 @@ class RNNAutoencoder(nn.Module):
 		self.d_hidden = d_hidden
 		self.d_latent = d_latent
 		self.num_layers = num_layers
-		self.sequence_length = num_layers
+		self.sequence_length = sequence_length
 		self.device = device
 
 		self.encoder = RNNEncoder(d_input, d_hidden, d_latent, num_layers)
 		self.decoder = RNNDecoder(d_latent, d_hidden, d_input, num_layers, sequence_length)
 
-	def forward(self, x, mask=None):
+	def forward(self, x, mask=None, delay=0):
+
+		self.delay = delay
 		if mask is not None:
 			assert isinstance(mask, torch.Tensor) and mask.shape == (self.d_hidden,), \
 				f"`mask` must be a 1D torch tensor with the same size as the hidden layer"
@@ -502,8 +510,8 @@ class RNNAutoencoder(nn.Module):
 		else:
 			_masking = lambda h: h
 
-		latent = self.encoder(x)
-		reconstructed = self.decoder(latent)
+		latent = self.encoder(x, delay=self.delay)
+		reconstructed = self.decoder(latent, delay=0)
 
 		return latent, reconstructed
 

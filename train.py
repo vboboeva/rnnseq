@@ -14,16 +14,19 @@ from itertools import product
 loss_functions = {
 	'RNNPred': {
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).view(-1, output.shape[-1]), torch.argmax(target,dim=-1).view(-1), reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).view(-1, output.shape[-1]), \
+									 torch.argmax(target,dim=-1).view(-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	},
 	'RNNClass': {
 		# 'CE': lambda output, target: F.cross_entropy(output, target, reduction="mean"),
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), torch.argmax(target, dim=-1), reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1), \
+									 torch.argmax(target, dim=-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	},
 	'RNNAuto': {
-		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).permute(0,2,1), torch.argmax(target, dim=-1), reduction="mean"),
+		'CE': lambda output, target: F.nll_loss(F.log_softmax(output, dim=-1).view(-1, output.shape[-1]), \
+									 torch.argmax(target, dim=-1).view(-1), reduction="mean"),
 		'MSE': lambda output, target: F.mse_loss(output, target, reduction="mean")
 	}
 }
@@ -64,8 +67,11 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 
 		elif task == 'RNNAuto':
 			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-			X_batch = X_batch.permute(1,0,-1)
-			ht, out_batch = model.forward(X_batch)
+			ht, out_batch = model.forward(X_batch, delay=delay)
+			# print(F.log_softmax(out_batch, dim=-1).shape)
+			# print(F.log_softmax(out_batch, dim=-1).view(-1, out_batch.shape[-1]).shape)
+			# print(torch.argmax(X_batch, dim=-1).view(-1).shape)
+			# exit()			
 			loss = loss_function(out_batch, X_batch)
 
 		# # adding L1 regularization to the loss
@@ -109,27 +115,23 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 			cue = [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
 			predicted = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
 			predicted = ''.join(predicted)
-			# print(predicted)
 
 		elif task == 'RNNClass':
 			y = y.to(model.device)
 			ht, out = model.forward(X, mask=mask, delay=delay)
 			# loss is btw activation of output layer at last time step (-1) and target which is one-hot vector
 			loss = loss_function(out[-1], y)   
-			label = torch.argmax(y, dim=-1)
 			predicted = torch.argmax(out[-1], dim=-1)
 			predicted = np.array([predicted])[0]
-			# print(predicted)
 
 		elif task == 'RNNAuto':
-			ht, out = model.forward(X.unsqueeze(0), mask=mask)
-			target = X.unsqueeze(0)
-			loss = loss_function(out, target)
-			label = torch.argmax(X.squeeze(0), dim=-1)
-			predicted = np.array(torch.argmax(out.squeeze(0), dim=-1))
+			ht, out = model.forward(X, mask=mask, delay=delay)
+			# loss is btw activation of output layer and input (target is input)
+			loss = loss_function(out, X)
+			# print(loss)
+			predicted = np.array(torch.argmax(out, dim=-1))
 			predicted = [index_to_letter[i] for i in predicted]
 			predicted = ''.join(predicted)
-			# print(predicted)
 
 	return predicted, loss.item(), ht.detach().cpu().numpy()
 
