@@ -21,6 +21,7 @@ import pickle
 import json
 
 from train import tokenwise_test
+from find_flat_distribution_subset import *
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -101,7 +102,7 @@ def remove_subset(configurations, subset):
 	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
 	return np.array(filtered)
 
-def make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
+def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
 	n_test = len(all_tokens) - n_train
@@ -109,6 +110,9 @@ def make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, al
 
 	print('number of train', n_train)
 	print('number of test', n_test)
+
+	letter_to_index, index_to_letter = make_dicts(alpha)
+
 
 	torch.manual_seed(sim_datasplit)
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
@@ -118,8 +122,21 @@ def make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, al
 	num_types = int(len(all_tokens) / num_tokens_onetype)
 	n_train_type = n_train // num_types
 
-	train_ids = ids[:, :n_train_type].reshape(-1)
-	test_ids = ids[:, n_train_type:].reshape(-1)
+	if data_balance == 'class':
+
+		train_ids = ids[:, :n_train_type].reshape(-1)
+		test_ids = ids[:, n_train_type:].reshape(-1)
+
+	# search a set of sequences out of all_tokens such that a criterion is reached
+	elif data_balance == 'whatwhere':
+
+		print("Feasibility:", check_feasibility(all_tokens, n_test))
+
+		test_ids =find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
+		train_ids = np.setdiff1d(np.arange(len(all_tokens)), test_ids)
+	
+	print(len(test_ids))
+	print(len(train_ids))
 
 	X_train = X[:, train_ids, :]
 	X_test = X[:, test_ids, :]

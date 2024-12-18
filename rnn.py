@@ -57,7 +57,8 @@ def main(
 	weight_decay = 0.,
 	ablate=True,
 	delay=0,
-	cue_size=1
+	cue_size=1,
+	data_balance='class'
 ):
 	print('TASK', task)
 	print('DATASPLIT NO', sim_datasplit)
@@ -70,7 +71,7 @@ def main(
 
 	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types = make_tokens(all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
@@ -164,7 +165,7 @@ if __name__ == "__main__":
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1, # number of RNN layers
-		n_latent = 20, # size of latent layer (autoencoder only!!)
+		n_latent = 10, # size of latent layer (autoencoder only!!)
 		# L = 4, # length of sequence
 		m = 2, # number of unique letters in each sequence
 		task = 'RNNAuto',  # choose btw 'RNNPred' and 'RNNClass', and RNNAuto
@@ -176,7 +177,7 @@ if __name__ == "__main__":
 		transfer_func = 'relu', # transfer function of RNN units only
 		n_epochs = 100, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 0.8, # fraction of dataset to train on
+		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		n_types = -1, # # number of types to train net with: 1 takes just the first, -1 takes all types. Set minimum 2 for class task to make sense
 		alpha = 5, # size of alphabet
@@ -186,6 +187,7 @@ if __name__ == "__main__":
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
 		cue_size = 1, # number of letters to cue net with (prediction task only!!)
+		data_balance = 'whatwhere' # choose btw 'class' and 'whatwhere'
 	)
 
 	# parameters
