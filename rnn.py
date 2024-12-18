@@ -41,17 +41,17 @@ def main(
 	m = 2,
 	task=None,
 	objective='CE',
-	model_filename=None, # string with parameters filename
-	from_file = [], # layers to set from file
-	to_freeze = [], # layers not to be updated 
-	init_weights=None, # 'const', 'lazy', 'rich' 
+	model_filename=None, 
+	from_file = [], 
+	to_freeze = [], 
+	init_weights=None, 
 	transfer_func='relu',
 	n_epochs=10,
 	batch_size=7,
-	frac_train=0.7,  # fraction of data to train net with
-	n_repeats=1,  # max number of repeats of a given sequence
-	n_types=-1,  # number of types to train net with: 1 takes just the first, -1 takes all
-	alpha=5,  # length of alphabet
+	frac_train=0.7,  
+	n_repeats=1,  
+	n_types=-1,  
+	alpha=5,
 	snap_freq=2,
 	drop_connect = 0.,
 	weight_decay = 0.,
@@ -163,29 +163,29 @@ if __name__ == "__main__":
 
 	main_kwargs = dict(
 		# network parameters
-		n_layers = 1,
-		n_latent = 20,
-		# L = 4,
-		m = 2,
+		n_layers = 1, # number of RNN layers
+		n_latent = 20, # size of latent layer (autoencoder only!!)
+		# L = 4, # length of sequence
+		m = 2, # number of unique letters in each sequence
 		task = 'RNNAuto',  # choose btw 'RNNPred' and 'RNNClass', and RNNAuto
-		objective = 'CE',
-		model_filename = 'model_state_datasplit0_sim0.pth',
-		from_file = [], # ['i2h', ['h2h']], 
-		to_freeze = [], # ['i2h','h2h'], 
-		init_weights = None,
-		transfer_func = 'relu',
-		n_epochs = 100,
+		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
+		model_filename = None, # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
+		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
+		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
+		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
+		transfer_func = 'relu', # transfer function of RNN units only
+		n_epochs = 100, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 0.8,
-		n_repeats = 1,
-		n_types = -1, # set minimum 2 for class task to make sense
-		alpha = 5,
+		frac_train = 0.8, # fraction of dataset to train on
+		n_repeats = 1, # number of repeats of each sequence for training
+		n_types = -1, # # number of types to train net with: 1 takes just the first, -1 takes all types. Set minimum 2 for class task to make sense
+		alpha = 5, # size of alphabet
 		snap_freq = 5, # snapshot of net activity every snap_freq epochs
-		drop_connect = 0.,
+		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
-		ablate = False,
-		delay=0,
-		cue_size=1 # only used for prediction task: number of letters to cue net with
+		ablate = False, # whether to test net with ablated units
+		delay = 0, # number of zero-padding steps at end of input
+		cue_size = 1, # number of letters to cue net with (prediction task only!!)
 	)
 
 	# parameters
