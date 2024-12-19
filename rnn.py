@@ -140,10 +140,10 @@ def main(
 
 			# Print loss
 			if epoch in epochs_snapshot:
-				meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys()])
+				meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
 
 				tokens=results['Loss'].keys()
-				print(f'Epoch [{epoch}], Loss: {meanval:.4f}')	
+				print(f'Epoch [{epoch}], Mean Gen Loss: {meanval:.4f}')	
 	else:
 		print("Task not recognized!")
 		return
