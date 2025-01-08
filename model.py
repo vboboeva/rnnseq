@@ -524,6 +524,10 @@ class RNNMultiTask (nn.Module):
 		self.device = device
 		self.task = None
 
+	@property
+	def h2h (self):
+		return self.rnn.h2h
+
 	def set_task(self, task):
 		self.task = task
 
