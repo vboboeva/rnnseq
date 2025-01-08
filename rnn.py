@@ -22,7 +22,8 @@ import json
 
 from functions import * 
 from train import train
-from model import RNN, RNNAutoencoder, LinearWeightDropout
+from train import train_multitask
+from model import RNN, RNNAutoencoder, RNNMultiTask, LinearWeightDropout
 # from quick_plot import plot_weights
 # from quick_plot import plot_loss
 # from quick_plot import plot_accuracy_ablation
@@ -71,7 +72,7 @@ def main(
 
 	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
@@ -102,6 +103,9 @@ def main(
 	
 	elif task == 'RNNAuto':
 		model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L, device=device)
+	
+	elif task == 'MultiTask':
+		model = RNNMultiTask(alpha, n_hidden, n_layers, n_latent, num_classes, L, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 
 	else:
 		raise ValueError(f"Model not recognized: {modeltype}")
@@ -113,33 +117,30 @@ def main(
 			lr=learning_rate, weight_decay=0,
 		)
 
+	test_task = 'RNNClass'
 	# Set up the results dictionary
-	results, token_to_type, token_to_set = make_results_dict(task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+	results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
 
 	print('TRAINING NETWORK')
 
-	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
+	for epoch in range(n_epochs + 1):
+		if epoch in epochs_snapshot:
 
-		for epoch in range(n_epochs + 1):
-			if epoch in epochs_snapshot:
+			# Forward pass
+			# print('testing')
+			model.set_task(test_task)
+			test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
-				# Forward pass
-				# print('testing')
-				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+		# print('training')
+		# Backward pass and optimization
+		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
 
-			# print('training')
-			# Backward pass and optimization
-			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
+		# Print loss
+		if epoch in epochs_snapshot:
+			meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
 
-			# Print loss
-			if epoch in epochs_snapshot:
-				meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
-
-				tokens=results['Loss'].keys()
-				print(f'Epoch [{epoch}], Mean Gen Loss: {meanval:.4f}')	
-	else:
-		print("Task not recognized!")
-		return
+			tokens=results['Loss'].keys()
+			print(f'Epoch [{epoch}], Mean Gen Loss: {meanval:.4f}')
 
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
 	# plot_weights(results, 5)
@@ -161,7 +162,7 @@ if __name__ == "__main__":
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		# L = 4, # length of sequence
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNAuto',  # choose btw 'RNNPred' and 'RNNClass', and RNNAuto
+		task = 'MultiTask',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'MultiTask' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		model_filename = None, # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
@@ -179,8 +180,8 @@ if __name__ == "__main__":
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 1, # number of letters to cue net with (prediction task only!!)
-		data_balance = 'whatwhere' # choose btw 'class' and 'whatwhere'
+		cue_size = 3, # number of letters to cue net with (prediction task only!!)
+		data_balance = 'class' # choose btw 'class' and 'whatwhere'
 	)
 
 	# parameters
