@@ -9,6 +9,7 @@ from pprint import pprint
 from tqdm import tqdm
 import string
 from itertools import product
+from model import RNNMultiTask
 
 
 loss_functions = {
@@ -64,13 +65,15 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	optimizer.step()
 	return
 
-
 def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
-	# print('Training')
-	# Define loss functions
-	loss_function = loss_functions[task][objective]
-
+	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
+		task_list = n_batches*[task]
+	elif task == 'MultiTask':
+		task_list = np.random.choice(['RNNPred', 'RNNClass', 'RNNAuto'], size=n_batches)
+	else:
+		raise NotImplementedError(f"Task {task} not implemented")
+	
 	n_train = X_train.shape[1]
 
 	model.train()
@@ -78,7 +81,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 	_ids = torch.randperm(n_train)
 
 	# training in batches
-	for batch in range(n_batches):
+	for batch, _task in enumerate(task_list):
 
 		batch_start = batch * batch_size
 		batch_end = (batch + 1) * batch_size
@@ -86,7 +89,10 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 		X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
 		y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 
-		train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_decay=weight_decay, delay=delay)
+		if hasattr(model, 'set_task'):
+			model.set_task(_task)
+
+		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
 
 	return 
 
