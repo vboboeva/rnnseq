@@ -426,7 +426,6 @@ class RNN (Net):
 
 		output = self.h2o(hidden)
 		# print('outputshape', np.shape(output))
-		# exit()
 
 		return hidden, output
 
@@ -514,6 +513,37 @@ class RNNAutoencoder(nn.Module):
 		reconstructed = self.decoder(latent, delay=0)
 
 		return latent, reconstructed
+
+class RNNMultiTask (nn.Module):
+	def __init__(self, d_input, d_hidden, num_layers, d_latent, num_classes, sequence_length, device="cpu", model_filename=None, from_file=[], to_freeze=[], init_weights=None, layer_type=nn.Linear):
+		super(RNNMultiTask, self).__init__()
+		self.rnn = RNN(d_input, d_hidden, num_layers, d_latent)
+		self.out_class = nn.Linear(d_hidden, num_classes)
+		self.out_pred = nn.Linear(d_hidden, d_input)
+		self.out_auto = RNNDecoder(d_latent, d_hidden, d_input, num_layers, sequence_length)
+		self.device = device
+		self.task = None
+
+	def set_task(self, task):
+		self.task = task
+
+	def forward(self, x, mask=None, delay=0):
+
+		hidden, output = self.rnn(x, mask=mask, delay=delay)
+
+		if self.task == 'RNNClass':
+			output = self.out_class(hidden)
+			return hidden, output
+		elif self.task == 'RNNPred':
+			output = self.out_pred(hidden)
+			return hidden, output
+		elif self.task == 'RNNAuto':
+			latent = output[-1]
+			output = self.out_auto(latent, delay=0)
+			return latent, output
+		else:
+			raise ValueError(f"Invalid task: {self.task}")
+
 
 	def save(self, filename):
 		torch.save(self.state_dict(), filename)
