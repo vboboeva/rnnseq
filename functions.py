@@ -119,8 +119,8 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	for i, ids_type in enumerate(ids):
 		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
 
-	num_types = int(len(all_tokens) / num_tokens_onetype)
-	n_train_type = n_train // num_types
+	num_classes = int(len(all_tokens) / num_tokens_onetype)
+	n_train_type = n_train // num_classes
 
 	if data_balance == 'class':
 
@@ -149,7 +149,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	labels_train = all_labels[train_ids]
 	labels_test = all_labels[test_ids]
 
-	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_types
+	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_classes
 
 def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
 
@@ -252,9 +252,9 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				if which_task == 'RNNClass':
-					results['Loss'][token][epoch][idx_ablate]=loss
-					results['Retrieval'][token][epoch][idx_ablate]=Z # how token was classified
-					results['yh'][token][epoch][idx_ablate]=yh	 # hidden layer activity throughout sequence: L by n_hidden
+					results['Loss'][token][epoch][idx_ablate] = loss
+					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
+					results['yh'][token][epoch][idx_ablate] = yh	 # hidden layer activity throughout sequence: L by n_hidden
 					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNPred':
