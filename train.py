@@ -35,6 +35,36 @@ loss_functions = {
 # 			train network 				 #
 ##########################################
 
+def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_decay=0., delay=0):
+	
+	optimizer.zero_grad()
+
+	if task == 'RNNPred':
+		ht, out_batch = model.forward(X_batch)
+		loss = loss_function(out_batch[:-1], X_batch[1:])
+	
+	elif task == 'RNNClass':
+		ht, out_batch = model.forward(X_batch, delay=delay)
+		loss = loss_function(out_batch[-1], y_batch)
+
+	elif task == 'RNNAuto':
+		ht, out_batch = model.forward(X_batch, delay=delay)
+		# print(F.log_softmax(out_batch, dim=-1).shape)
+		# print(F.log_softmax(out_batch, dim=-1).view(-1, out_batch.shape[-1]).shape)
+		# print(torch.argmax(X_batch, dim=-1).view(-1).shape)
+		# exit()			
+		loss = loss_function(out_batch, X_batch)
+
+	# # adding L1 regularization to the loss
+	# if weight_decay > 0.:
+	# 	loss += weight_decay * torch.mean(torch.abs(model.h2h.weight))
+	# 	loss += .3 * weight_decay * torch.linalg.matrix_norm(model.h2h.weight, ord=2) / model.h2h.weight.shape[0]**2
+
+	loss.backward()
+	optimizer.step()
+	return
+
+
 def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
 	# print('Training')
@@ -50,37 +80,14 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 	# training in batches
 	for batch in range(n_batches):
 
-		optimizer.zero_grad()
 		batch_start = batch * batch_size
 		batch_end = (batch + 1) * batch_size
 
 		X_batch = X_train[:, _ids[batch_start:batch_end], :].to(model.device)
+		y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
 
-		if task == 'RNNPred':
-			ht, out_batch = model.forward(X_batch)
-			loss = loss_function(out_batch[:-1], X_batch[1:])
-		
-		elif task == 'RNNClass':
-			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-			ht, out_batch = model.forward(X_batch, delay=delay)
-			loss = loss_function(out_batch[-1], y_batch)
+		train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_decay=weight_decay, delay=delay)
 
-		elif task == 'RNNAuto':
-			y_batch = y_train[_ids[batch_start:batch_end], :].to(model.device)
-			ht, out_batch = model.forward(X_batch, delay=delay)
-			# print(F.log_softmax(out_batch, dim=-1).shape)
-			# print(F.log_softmax(out_batch, dim=-1).view(-1, out_batch.shape[-1]).shape)
-			# print(torch.argmax(X_batch, dim=-1).view(-1).shape)
-			# exit()			
-			loss = loss_function(out_batch, X_batch)
-
-		# # adding L1 regularization to the loss
-		# if weight_decay > 0.:
-		# 	loss += weight_decay * torch.mean(torch.abs(model.h2h.weight))
-		# 	loss += .3 * weight_decay * torch.linalg.matrix_norm(model.h2h.weight, ord=2) / model.h2h.weight.shape[0]**2
-
-		loss.backward()
-		optimizer.step()
 	return 
 
 ##########################################
