@@ -81,17 +81,6 @@ def main(
 	torch.manual_seed(sim)
 	n_batches = n_train // batch_size
 
-	# Dynamically determine the output size of the model
-	task_to_output_size = {
-		'RNNPred': alpha,
-		'RNNClass': num_types,
-		'RNNAuto': alpha
-	}
-
-	output_size = task_to_output_size.get(task)
-	if output_size is None:
-		raise ValueError(f"Invalid task: {task}")
-
 	# n_epochs for which take a snapshot of neural activity
 	epochs_snapshot = np.arange(0, int(n_epochs)+1, snap_freq)
 
@@ -102,6 +91,10 @@ def main(
 
 	# Create the model
 	if task in ['RNNClass', 'RNNPred']:
+		if task == 'RNNClass':
+			output_size = num_classes
+		else:
+			output_size = alpha
 		model = RNN(alpha, n_hidden, n_layers, output_size, 
 		nonlinearity=transfer_func, device=device, 
 		model_filename=model_filename, from_file=from_file,
