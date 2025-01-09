@@ -141,14 +141,15 @@ def main(
 			for test_task, results in zip(test_tasks, results_list):
 				if test_task == 'RNNClass' or test_task == 'RNNAuto':
 					meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
-					print(f'Loss Train:{meanval}', end='\t')
+					print(f'Loss Train:{meanval:.2f}', end='    ')
 		   
 				elif test_task == 'RNNPred':
-					predicted = results['Retrieval'][epoch][0]
+					losses = results['Loss'][epoch][0]
+					predicted_tokens = results['Retrieval'][epoch][0]
 					tokens_train_str = [''.join(p) for p in tokens_train]
-					meanval=np.mean([1 if p in tokens_train_str else 0 for p in predicted])
-					print(f'Accuracy Train:{meanval}', end='\t')
-				print('\n')
+					meanval=np.mean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train_str])
+					print(f'Loss Train:{meanval:.2f}', end='    ')
+			print('\n')
 						
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
 	# plot_weights(results, 5)
@@ -169,7 +170,7 @@ if __name__ == "__main__":
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		# L = 4, # length of sequence
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'MultiTask' 
+		task = 'MultiTask',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'MultiTask' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		model_filename = None, # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
@@ -187,7 +188,7 @@ if __name__ == "__main__":
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 3, # number of letters to cue net with (prediction task only!!)
+		cue_size = 2, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class' # choose btw 'class' and 'whatwhere'
 	)
 
