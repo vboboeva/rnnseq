@@ -184,7 +184,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 		results = {}
 		token_to_type = {}
 		token_to_set = {}
-		for measure in ['Retrieval', 'yh']:
+		for measure in ['Loss', 'Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
 			for set_, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
@@ -247,6 +247,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNPred':
+					results['Loss'][epoch][idx_ablate].append(loss) # loss for token retrieved
 					results['Retrieval'][epoch][idx_ablate].append(Z) # which token retrieved (Z)
 					results['yh'][epoch][idx_ablate].append(yh)  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
 					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
