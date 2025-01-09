@@ -101,12 +101,14 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 ##########################################
 
 
-def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, objective, task,
-	n_hidden=10,
+def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	delay=0,
 	cue_size=1
 	):
+
+	if hasattr(model, 'set_task'):
+		model.set_task(task)
 	
 	# Define loss functions
 	loss_function = loss_functions[task][objective]
