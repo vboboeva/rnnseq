@@ -22,7 +22,6 @@ import json
 
 from functions import * 
 from train import train
-from train import train_multitask
 from model import RNN, RNNAutoencoder, RNNMultiTask, LinearWeightDropout
 # from quick_plot import plot_weights
 # from quick_plot import plot_loss
@@ -113,41 +112,49 @@ def main(
 	# Set up the optimizer
 	optimizer = optim.Adam(
 			model.parameters(),
-			# filter(lambda p: p.requires_grad, model.parameters()), # may not be necessary
 			lr=learning_rate, weight_decay=0,
 		)
 
-	test_task = 'RNNClass'
-	# Set up the results dictionary
-	results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+	if task != 'MultiTask':
+		test_tasks = [task]
+		results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+		results_list = [results]
+	else:
+		test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
+		results_list = []
+		for test_task in test_tasks:
+			results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+			results_list.append(results)
 
 	print('TRAINING NETWORK')
 
 	for epoch in range(n_epochs + 1):
 		if epoch in epochs_snapshot:
+			for test_task, results in zip(test_tasks, results_list):
+				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
-			# Forward pass
-			# print('testing')
-			model.set_task(test_task)
-			test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
-
-		# print('training')
-		# Backward pass and optimization
 		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
 
 		# Print loss
 		if epoch in epochs_snapshot:
-			meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
-
-			tokens=results['Loss'].keys()
-			print(f'Epoch [{epoch}], Mean Gen Loss: {meanval:.4f}')
-
+			print(f'Epoch [{epoch}])', end='\t')
+			for test_task, results in zip(test_tasks, results_list):
+				if test_task == 'RNNClass' or test_task == 'RNNAuto':
+					meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+					print(f'Loss Train:{meanval}', end='\t')
+		   
+				elif test_task == 'RNNPred':
+					predicted = results['Retrieval'][epoch][0]
+					tokens_train_str = [''.join(p) for p in tokens_train]
+					meanval=np.mean([1 if p in tokens_train_str else 0 for p in predicted])
+					print(f'Accuracy Train:{meanval}', end='\t')
+				print('\n')
+						
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
 	# plot_weights(results, 5)
 	# plot_loss(n_types, n_hidden, ablate, results)
 	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
-
-	return model, results, token_to_type, token_to_set
+	return model, results_list, test_tasks, token_to_type, token_to_set
 
 ##################################################
 
@@ -162,7 +169,7 @@ if __name__ == "__main__":
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		# L = 4, # length of sequence
 		m = 2, # number of unique letters in each sequence
-		task = 'MultiTask',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'MultiTask' 
+		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'MultiTask' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		model_filename = None, # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
@@ -214,7 +221,7 @@ if __name__ == "__main__":
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		model, results, token_to_type, token_to_set = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
+		model, results_list, test_tasks, token_to_type, token_to_set = main(learning_rate, n_hidden, sim, sim_datasplit, **main_kwargs)
 
 		print('SAVING FILES')
-		savefiles(output_folder_name, sim, main_kwargs['task'], model, results, token_to_type, token_to_set)
+		savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set)
