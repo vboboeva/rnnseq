@@ -153,16 +153,15 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 
 def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
 
-	# Set up the dictionary that will contain results for each token
-	results = {}
-	token_to_type = {}
-	token_to_set = {}
+	def make_class_auto():
+		results = {}
+		token_to_type = {}
+		token_to_set = {}
 
-	if which_task == 'RNNClass':
 		for measure in ['Loss', 'Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
-			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+			for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
 
 				tokens = [''.join(token) for token in tokens]
 			
@@ -177,10 +176,14 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 						results[measure][token][epoch].update({0:[]})
 				
 						if ablate == True: 		
-							for unit_ablated in range(1, n_hidden+1):
+							for unit_ablated in range(1, n_hidden + 1):
 								results[measure][token][epoch].update({unit_ablated:[]})
-
-	if which_task == 'RNNPred':
+		return results, token_to_type, token_to_set
+	
+	def make_pred():
+		results = {}
+		token_to_type = {}
+		token_to_set = {}
 		for measure in ['Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
@@ -199,31 +202,17 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 				if ablate == True: 		
 					for unit_ablated in range(1, n_hidden+1):
 						results[measure][epoch].update({unit_ablated:[]})
+		return results, token_to_type, token_to_set
 
+	if which_task == 'RNNClass' or which_task == 'RNNAuto':
+		# Set up the dictionary that will contain results for each token
+		results, token_to_type, token_to_set = make_class_auto()
+	
+	if which_task == 'RNNPred':
+		# Set up the dictionary that will contain results for each token
+		results, token_to_type, token_to_set = make_pred()
 
-	if which_task == 'RNNAuto':
-		for measure in ['Loss', 'Retrieval', 'yh']:
-			results.update({measure:{}}) 
-
-			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
-
-				tokens = [''.join(token) for token in tokens]
-			
-				for token, label in (zip(tokens, labels)):
-					token_to_set.update({token:set_}) 
-					token_to_type.update({token:label})
-
-					results[measure].update({token:{}})
-
-					for epoch in epochs_snapshot:
-						results[measure][token].update({epoch:{}})
-						results[measure][token][epoch].update({0:[]})
-				
-						if ablate == True: 		
-							for unit_ablated in range(1, n_hidden + 1):
-								results[measure][token][epoch].update({unit_ablated:[]})
-
-	results['Whh']=[]
+	results['Whh'] = []
 	return results, token_to_type, token_to_set
 
 def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
@@ -268,13 +257,14 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 					yh_unsqueezed=np.expand_dims(yh, axis=0)
 					results['yh'][token][epoch][idx_ablate]=yh_unsqueezed # latent layer activity throughout sequence: n_latent
 
-def savefiles(output_folder_name, sim, which_task, model, results, token_to_type, token_to_set):
+def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set):
 	
 	# Save the model state
 	model.save('%s/model_state_sim%d.pth' % (output_folder_name, sim))
 
-	with open('%s/results_sim%d.pkl'% (output_folder_name, sim), 'wb') as handle:
-	    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+	for results, task in zip(results_list, test_tasks):
+		with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
+		    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 	with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
 	    pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
