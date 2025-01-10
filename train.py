@@ -9,7 +9,7 @@ from pprint import pprint
 from tqdm import tqdm
 import string
 from itertools import product
-from model import RNNMultiTask
+from model import RNNMulti
 
 
 loss_functions = {
@@ -50,10 +50,6 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 
 	elif task == 'RNNAuto':
 		ht, out_batch = model.forward(X_batch, delay=delay)
-		# print(F.log_softmax(out_batch, dim=-1).shape)
-		# print(F.log_softmax(out_batch, dim=-1).view(-1, out_batch.shape[-1]).shape)
-		# print(torch.argmax(X_batch, dim=-1).view(-1).shape)
-		# exit()			
 		loss = loss_function(out_batch, X_batch)
 
 	# # adding L1 regularization to the loss
@@ -69,7 +65,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 
 	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
 		task_list = n_batches*[task]
-	elif task == 'MultiTask':
+	elif task == 'RNNMulti':
 		task_list = np.random.choice(['RNNPred', 'RNNClass', 'RNNAuto'], size=n_batches)
 	else:
 		raise NotImplementedError(f"Task {task} not implemented")
@@ -167,7 +163,7 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 			# last_letter_logits has dimension alpha
 			last_letter_logits = y_pred[-1,:]
 			# applies a softmax to transform activations into a proba, has dimensions alpha
-			proba = temperature_scaled_softmax(last_letter_logits, temperature=1.).detach().cpu().numpy()
+			proba = torch.softmax(last_letter_logits, dim=0).detach().cpu().numpy()
 			# then samples randomly from that proba distribution 
 			letter_index = np.random.choice(len(last_letter_logits), p=proba)
 
@@ -175,7 +171,3 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 			seq_start.append(index_to_letter[letter_index])
 
 	return seq_start
-
-def temperature_scaled_softmax(logits, temperature=1.0):
-	logits = logits / temperature
-	return torch.softmax(logits, dim=0)

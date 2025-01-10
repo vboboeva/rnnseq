@@ -369,7 +369,6 @@ class RNNDecoder(nn.Module):
 class RNNAutoencoder(nn.Module):
 	def __init__(self, d_input, d_hidden, num_layers, d_latent, sequence_length, device="cpu"):
 		super(RNNAutoencoder, self).__init__()
-		# print(d_input, d_hidden, d_latent, num_layers)
 
 		self.d_input = d_input
 		self.d_hidden = d_hidden
@@ -397,9 +396,9 @@ class RNNAutoencoder(nn.Module):
 
 		return latent, reconstructed
 
-class RNNMultiTask (nn.Module):
+class RNNMulti (nn.Module):
 	def __init__(self, d_input, d_hidden, num_layers, d_latent, num_classes, sequence_length, device="cpu", model_filename=None, from_file=[], to_freeze=[], init_weights=None, layer_type=nn.Linear):
-		super(RNNMultiTask, self).__init__()
+		super(RNNMulti, self).__init__()
 		self.rnn = RNN(d_input, d_hidden, num_layers, d_latent)
 		self.out_class = nn.Linear(d_hidden, num_classes)
 		self.out_pred = nn.Linear(d_hidden, d_input)
