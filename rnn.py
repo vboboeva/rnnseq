@@ -146,8 +146,15 @@ def main(
 				elif test_task == 'RNNPred':
 					losses = results['Loss'][epoch][0]
 					predicted_tokens = results['Retrieval'][epoch][0]
-					tokens_train_str = [''.join(p) for p in tokens_train]
-					meanval=np.mean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train_str])
+					# print(predicted_tokens)
+					tokens_train = [''.join(p) for p in tokens_train]
+					# tokens_test = [''.join(p) for p in tokens_test]
+					# tokens_other = [''.join(p) for p in tokens_other]
+					retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
+					# retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
+					# retrieved_other = len([s for s in predicted_tokens if s in tokens_other])/len(predicted_tokens)
+					meanval=np.mean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
+					# print(f'{test_task} Loss Tr {meanval:.2f} frac_train {retrieved_train:.2f} frac_test {retrieved_test:.2f} frac_other{retrieved_other:.4f}', end='   ')
 					print(f'{test_task} Loss Tr {meanval:.2f}', end='   ')
 			print('\n')
 						
@@ -188,7 +195,7 @@ if __name__ == "__main__":
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 1, # number of letters to cue net with (prediction task only!!)
+		cue_size = 3, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class' # choose btw 'class' and 'whatwhere'
 	)
 
