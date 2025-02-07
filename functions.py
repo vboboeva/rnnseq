@@ -178,6 +178,14 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 						if ablate == True: 		
 							for unit_ablated in range(1, n_hidden + 1):
 								results[measure][token][epoch].update({unit_ablated:[]})
+			set_ = 'other'
+			tokens = [''.join(token) for token in tokens_other]
+			labels = labels_other
+
+			for token, label in (zip(tokens, labels)):
+				token_to_set.update({token:set_}) 
+				token_to_type.update({token:label})
+			
 		return results, token_to_type, token_to_set
 	
 	def make_pred():
@@ -209,7 +217,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 		results, token_to_type, token_to_set = make_class_auto()
 	
 	if which_task == 'RNNPred':
-		# Set up the dictionary that will contain results for each token
+		# Set up the dictionary that will contain results
 		results, token_to_type, token_to_set = make_pred()
 
 	results['Whh'] = []
@@ -239,7 +247,6 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				# For reconstruction task, Z is the reconstructed sequence
 
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
-
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
 					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
