@@ -158,7 +158,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 		token_to_type = {}
 		token_to_set = {}
 
-		for measure in ['Loss', 'Retrieval', 'yh']:
+		for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
 			results.update({measure:{}}) 
 
 			for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
@@ -210,6 +210,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 				if ablate == True: 		
 					for unit_ablated in range(1, n_hidden+1):
 						results[measure][epoch].update({unit_ablated:[]})
+		
 		return results, token_to_type, token_to_set
 
 	if which_task == 'RNNClass' or which_task == 'RNNAuto':
@@ -250,20 +251,20 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
 					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
-					results['yh'][token][epoch][idx_ablate] = yh	 # hidden layer activity throughout sequence: L by n_hidden
-					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
+					results['yh'][token][epoch][idx_ablate] = yh.detach().cpu().numpy()	 # hidden layer activity throughout sequence: L by n_hidden
+					# results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNPred':
 					results['Loss'][epoch][idx_ablate].append(loss) # loss for token retrieved
 					results['Retrieval'][epoch][idx_ablate].append(Z) # which token retrieved (Z)
-					results['yh'][epoch][idx_ablate].append(yh)  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
-					results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
+					results['yh'][epoch][idx_ablate].append(yh.detach().cpu().numpy())  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
+					# results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNAuto':
 					results['Loss'][token][epoch][idx_ablate]=loss
 					results['Retrieval'][token][epoch][idx_ablate]=Z # how input token was reconstructed
-					yh_unsqueezed=np.expand_dims(yh, axis=0)
-					results['yh'][token][epoch][idx_ablate]=yh_unsqueezed # latent layer activity throughout sequence: n_latent
+					results['yh'][token][epoch][idx_ablate]=yh[0].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
+					results['latent'][token][epoch][idx_ablate]=yh[1].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
 
 def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set):
 	

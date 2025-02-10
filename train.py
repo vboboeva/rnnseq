@@ -49,7 +49,7 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 		loss = loss_function(out_batch[-1], y_batch)
 
 	elif task == 'RNNAuto':
-		ht, out_batch = model.forward(X_batch, delay=delay)
+		ht, latent, out_batch = model.forward(X_batch, delay=delay)
 		loss = loss_function(out_batch, X_batch)
 
 	# # adding L1 regularization to the loss
@@ -89,8 +89,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 			model.set_task(_task)
 
 		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
-
-	return 
+	return
 
 ##########################################
 # 				test network 			 #
@@ -136,15 +135,15 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 			predicted = np.array([predicted])[0]
 
 		elif task == 'RNNAuto':
-			ht, out = model.forward(X, mask=mask, delay=delay)
+			ht_, latent, out = model.forward(X, mask=mask, delay=delay)
 			# loss is btw activation of output layer and input (target is input)
 			loss = loss_function(out, X)
 			# print(loss)
 			predicted = np.array(torch.argmax(out, dim=-1))
 			predicted = [index_to_letter[i] for i in predicted]
 			predicted = ''.join(predicted)
-
-	return predicted, loss.item(), ht.detach().cpu().numpy()
+			ht = (ht_, latent)  # Append along time dimension
+	return predicted, loss.item(), ht
 
 def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_letters):
 	with torch.no_grad():

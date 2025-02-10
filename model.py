@@ -339,7 +339,7 @@ class RNNEncoder(nn.Module):
 		# h: (num_layers, batch_size, d_hidden)
 		rnn_out, latent = self.rnn(x, delay=delay)
 		# return activity of latent layer 
-		return latent[-1]
+		return rnn_out, latent[-1]
 
 class RNNDecoder(nn.Module):
 	def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
@@ -391,10 +391,10 @@ class RNNAutoencoder(nn.Module):
 		else:
 			_masking = lambda h: h
 
-		latent = self.encoder(x, delay=self.delay)
+		hidden, latent = self.encoder(x, delay=self.delay)
 		reconstructed = self.decoder(latent, delay=0)
 
-		return latent, reconstructed
+		return hidden, latent, reconstructed
 
 class RNNMulti (nn.Module):
 	def __init__(self, d_input, d_hidden, num_layers, d_latent, num_classes, sequence_length, device="cpu", model_filename=None, from_file=[], to_freeze=[], init_weights=None, layer_type=nn.Linear):
@@ -426,10 +426,9 @@ class RNNMulti (nn.Module):
 		elif self.task == 'RNNAuto':
 			latent = output[-1]
 			output = self.out_auto(latent, delay=0)
-			return latent, output
+			return hidden, latent, output
 		else:
 			raise ValueError(f"Invalid task: {self.task}")
-
 
 	def save(self, filename):
 		torch.save(self.state_dict(), filename)
