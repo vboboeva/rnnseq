@@ -12,6 +12,7 @@ from tqdm import tqdm
 import string
 import random
 import scipy
+import itertools
 from itertools import permutations
 from itertools import product
 from functools import partial
@@ -22,6 +23,30 @@ import json
 
 from train import tokenwise_test
 from find_flat_distribution_subset import *
+
+def replace_symbols (sequence, symbols):
+	newseq=np.array(list(sequence))
+
+	n_sym_seq = len(np.unique(newseq))
+	n_sym_repl = len(np.array(list(symbols)))
+
+	assert n_sym_seq == n_sym_repl, \
+		f"Trying to replace {n_sym_seq} symbols in sequence "+ \
+		f"with {n_sym_repl} symbols"
+
+	_, id_list = np.unique(newseq, return_index=True)
+
+	symbols_list = [newseq[idx] for idx in sorted(id_list)]
+	# print('symbols_list =', symbols_list)
+
+	pos_symbols = [np.where(newseq == sym)[0] for sym in symbols_list]
+	# print('pos_symbols =', pos_symbols)
+
+	for i, pos in enumerate(pos_symbols):
+		# print(i, symbols[i], pos)
+		newseq[pos] = symbols[i]
+
+	return "".join(list(newseq))
 
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
@@ -63,16 +88,27 @@ def make_dicts(alpha):
 def load_tokens(alpha, L, m, n_types, letter_to_index):
 	# load types
 	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
-
+	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	all_tokens=[]
 	all_labels=[]
 	# load all the tokens corresponding to that type
 	if n_types > 0:
 		types=types[:n_types]
 
+	# all permutations of m letters in the alphabet
+	list_permutations=list(itertools.permutations(alphabet, m))
+
 	for t, type_ in enumerate(types):
-		print('type_', type_)
-		tokens = loadtxt('input/%s.txt'%type_, dtype='str')
+		tokens=[]
+		# loop over all permutations 
+		for perm in list_permutations:
+			# print('perm =', perm)
+			newseq=replace_symbols(type_, perm)
+
+			tokens.append(newseq)
+
+		# tokens = loadtxt('input/%s.txt'%type_, dtype='str')
+
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
 		all_tokens.append(tokens_arr)
 		all_labels.append(np.array(len(tokens_arr)*[t]))
