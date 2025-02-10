@@ -125,11 +125,11 @@ if __name__ == "__main__":
     from scipy.special import binom, factorial
     
     # Length of sequence
-    L = 8
+    L = 4
     # Number of elements
     whichm = 2
     # Length of alphabet used
-    alpha = 5
+    alpha = 10
     alphabet = list(string.ascii_lowercase)[:alpha]
     print(alphabet)
     np.savetxt('input/alphabet.txt',alphabet, fmt='%s')
@@ -138,30 +138,26 @@ if __name__ == "__main__":
     types=findStructures(alphabet, L, whichm)
     types = [item for sublist in types for item in sublist]
     types=np.array(types)
-    # np.savetxt('input/types_L%d_m%d.txt'%(L, whichm),types, fmt='%s')
-
-    unique=list(set(types[0]))
+    np.savetxt('input/types_L%d_m%d.txt'%(L, whichm),types, fmt='%s')
 
     # Here we would like to make many different examples with the same underlying type_
-    # remove the letters already present in the sequences
-    letters=alphabet
 
-    # all permutations of m letters in the alphabet
-    list_permutations=list(itertools.permutations(alphabet, whichm))
+    # # all permutations of m letters in the alphabet
+    # list_permutations=list(itertools.permutations(alphabet, whichm))
 
-    # loop over the individual types
-    for type_ in types:
-        possibilities=[]
-        print('type_ =', type_)
+    # # loop over the individual types
+    # for type_ in types:
+    #     possibilities=[]
+    #     print('type_ =', type_)
 
-        # loop over all permutations 
-        for perm in list_permutations:
-            print('perm =', perm)
-            newseq=replace_symbols(type_, perm)
+    #     # loop over all permutations 
+    #     for perm in list_permutations:
+    #         print('perm =', perm)
+    #         newseq=replace_symbols(type_, perm)
 
-            possibilities.append(newseq)
-            # print(20*'--')
+    #         possibilities.append(newseq)
+    #         # print(20*'--')
             
-        # print(type_)
-        print(possibilities)
-        np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
+    #     # print(type_)
+    #     print(possibilities)
+    #     np.savetxt('input/%s.txt'%type_, possibilities, fmt='%s')
