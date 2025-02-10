@@ -148,14 +148,16 @@ def main(
 					predicted_tokens = results['Retrieval'][epoch][0]
 					# print(predicted_tokens)
 					tokens_train = [''.join(p) for p in tokens_train]
-					# tokens_test = [''.join(p) for p in tokens_test]
-					# tokens_other = [''.join(p) for p in tokens_other]
+					tokens_test = [''.join(p) for p in tokens_test]
+					tokens_other = [''.join(p) for p in tokens_other]
 					retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
-					# retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
-					# retrieved_other = len([s for s in predicted_tokens if s in tokens_other])/len(predicted_tokens)
-					meanval=np.mean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
+					retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
+					retrieved_other = len([s for s in predicted_tokens if s in tokens_other])/len(predicted_tokens)
+					meanval_train=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
+					meanval_test=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
+					meanval_other=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_other])
 					# print(f'{test_task} Loss Tr {meanval:.2f} frac_train {retrieved_train:.2f} frac_test {retrieved_test:.2f} frac_other{retrieved_other:.4f}', end='   ')
-					print(f'{test_task} Loss Tr {meanval:.2f}', end='   ')
+					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f} Loss NonPatt {meanval_other:.2f}', end='   ')
 			print('\n')
 						
 	# Quick and dirty plot of loss (comment when running on cluster, for local use)
