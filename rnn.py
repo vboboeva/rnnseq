@@ -2,7 +2,6 @@ import sys
 import os
 import numpy as np
 from numpy import loadtxt
-import torch
 import torch.nn as nn
 import torch.optim as optim
 import string
@@ -55,7 +54,7 @@ def main(
 
 	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
 
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
 	all_configurations = generate_configurations(L, np.array(alphabet))
 	tokens_other = remove_subset(all_configurations, all_tokens)
@@ -63,7 +62,7 @@ def main(
 
 	# Train and test network
 	torch.manual_seed(sim)
-	n_batches = n_train // batch_size
+	n_batches = len(tokens_train) // batch_size
 
 	# n_epochs for which take a snapshot of neural activity
 	epochs_snapshot = np.arange(0, int(n_epochs)+1, snap_freq)
@@ -91,7 +90,7 @@ def main(
 		model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 
 	else:
-		raise ValueError(f"Model not recognized: {modeltype}")
+		raise ValueError(f"Model not recognized: {task}")
 
 	# Set up the optimizer
 	optimizer = optim.Adam(
