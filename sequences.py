@@ -1,9 +1,6 @@
 import numpy as np
-import itertools
 from itertools import permutations
-from itertools import combinations
 import string
-
 
 '''
 Adapted from
@@ -121,8 +118,6 @@ def findStructures(alphabet, L, whichm):
     return types_by_m
 
 if __name__ == "__main__":
-
-    from scipy.special import binom, factorial
     
     # Length of sequence
     L = 4

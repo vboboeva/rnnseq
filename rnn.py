@@ -5,27 +5,11 @@ from numpy import loadtxt
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-from pprint import pprint
-from tqdm import tqdm
 import string
-import random
-import scipy
-from itertools import permutations
-from itertools import product
 from functools import partial
-from matplotlib import rc
-from pylab import rcParams
-import pickle
-import json
-
 from functions import * 
 from train import train
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
-# from quick_plot import plot_weights
-# from quick_plot import plot_loss
-# from quick_plot import plot_accuracy_ablation
 
 
 ###########################################
