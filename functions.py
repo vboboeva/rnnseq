@@ -128,13 +128,9 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
 	n_test = len(all_tokens) - n_train
-	n_other = alpha ** L - n_train - n_test
 
 	print('number of train', n_train)
 	print('number of test', n_test)
-
-	letter_to_index, index_to_letter = make_dicts(alpha)
-
 
 	torch.manual_seed(sim_datasplit)
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
@@ -157,9 +153,6 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 		test_ids =find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
 		train_ids = np.setdiff1d(np.arange(len(all_tokens)), test_ids)
 	
-	print(len(test_ids))
-	print(len(train_ids))
-
 	X_train = X[:, train_ids, :]
 	X_test = X[:, test_ids, :]
 	y_train = y[train_ids, :]
@@ -171,7 +164,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	labels_train = all_labels[train_ids]
 	labels_test = all_labels[test_ids]
 
-	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, n_train, n_test, n_other, num_classes
+	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes
 
 def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
 
@@ -295,13 +288,13 @@ def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to
 
 	for results, task in zip(results_list, test_tasks):
 		with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
-		    pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+			pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 	with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
-	    pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
+		pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 	with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
-	    pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
+		pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 	# # Convert and write JSON object to file
 	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:
