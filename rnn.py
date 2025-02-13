@@ -41,7 +41,8 @@ def main(
 	ablate=True,
 	delay=0,
 	cue_size=1,
-	data_balance='class'
+	data_balance='class',
+	teacher_forcing_ratio=0.5  # Add teacher forcing ratio parameter
 ):
 	print('TASK', task)
 	print('DATASPLIT NO', sim_datasplit)
@@ -116,7 +117,10 @@ def main(
 			for test_task, results in zip(test_tasks, results_list):
 				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
-		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
+		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
+
+		 # Decrease teacher forcing ratio
+		teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
 
 		# Print loss
 		if epoch in epochs_snapshot:
@@ -169,19 +173,20 @@ if __name__ == "__main__":
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
 		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 100, # number of training epochs
+		n_epochs = 300, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		n_types = 1, # # number of types to train net with: 1 takes just the first, -1 takes all types. Set minimum 2 for class task to make sense
-		alpha = 15, # size of alphabet
+		alpha = 10, # size of alphabet
 		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 3, # number of letters to cue net with (prediction task only!!)
-		data_balance = 'class' # choose btw 'class' and 'whatwhere'
+		cue_size = 2, # number of letters to cue net with (prediction task only!!)
+		data_balance = 'class', # choose btw 'class' and 'whatwhere'
+		teacher_forcing_ratio = 1.  # Add teacher forcing ratio parameter
 	)
 
 	# parameters
