@@ -283,24 +283,18 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 					results['latent'][token][epoch][idx_ablate]=yh[1].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
 
 def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set):
-	
-	# Save the model state
-	model.save('%s/model_state_sim%d.pth' % (output_folder_name, sim))
+    # Save the model state
+    torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
 
-	for results, task in zip(results_list, test_tasks):
-		with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
-			pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    for results, task in zip(results_list, test_tasks):
+        with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
+            pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-	with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
-		pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
+        pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-	with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
-		pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-	# # Convert and write JSON object to file
-	# with open('%s/results_sim%d.json'% (output_folder_name, sim), 'wb') as handle:
-	# 	_dumps = json.dumps(results)
-	# 	json.dump(_dumps, handle)
+    with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
+        pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # def Hypo1():
 # 	# HYPOTHESIS 1
