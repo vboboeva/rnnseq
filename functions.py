@@ -150,7 +150,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 
 		print("Feasibility:", check_feasibility(all_tokens, n_test))
 
-		test_ids =find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
+		test_ids = find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
 		train_ids = np.setdiff1d(np.arange(len(all_tokens)), test_ids)
 	
 	X_train = X[:, train_ids, :]
@@ -159,6 +159,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	y_test = y[test_ids, :]
 
 	tokens_train = all_tokens[train_ids, :]
+
 	tokens_test = all_tokens[test_ids, :]
 
 	labels_train = all_labels[train_ids]
