@@ -328,7 +328,8 @@ class RNNEncoder(nn.Module):
 		# output: (sequence_length, batch_size, d_hidden)
 		# h: (num_layers, batch_size, d_hidden)
 		rnn_out, latent = self.rnn(x, delay=delay)
-		# return activity of latent layer 
+		# return activity of latent layer at end of sequence
+		# latent = F.relu(latent)
 		return rnn_out, latent[-1]
 
 class RNNDecoder(nn.Module):
@@ -369,6 +370,10 @@ class RNNAutoencoder(nn.Module):
 
 		self.encoder = RNNEncoder(d_input, d_hidden, d_latent, num_layers)
 		self.decoder = RNNDecoder(d_latent, d_hidden, d_input, num_layers, sequence_length)
+
+	@property
+	def h2h (self):
+		return self.encoder.rnn.h2h
 
 	def forward(self, x, mask=None, delay=0):
 
