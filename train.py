@@ -79,23 +79,22 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 		if hasattr(model, 'set_task'):
 			model.set_task(_task)
 
-		# Implement scheduled sampling
-		use_teacher_forcing = random.random() < teacher_forcing_ratio
-		# print(use_teacher_forcing)
-		if use_teacher_forcing:
-			train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
-		else:
-			# Use model's own predictions as inputs
-			input_seq = X_batch[0].unsqueeze(0)
-			
-			for t in range(1, X_batch.size(0)):
-				_, output = model.forward(input_seq)
-				input_seq = torch.cat((input_seq, output[-1].unsqueeze(0)), dim=0)
-			train_batch(input_seq, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
+		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
 
-	# Decrease teacher forcing ratio
-	teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
-	# print(f"Teacher forcing ratio: {teacher_forcing_ratio}")
+		# # Implement scheduled sampling
+		# use_teacher_forcing = random.random() < teacher_forcing_ratio
+		# # print(use_teacher_forcing)
+		# if use_teacher_forcing:
+		# 	train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
+		# else:
+		# 	# Use model's own predictions as inputs
+		# 	input_seq = X_batch[0].unsqueeze(0)
+			
+		# 	for t in range(1, X_batch.size(0)):
+		# 		_, output = model.forward(input_seq)
+		# 		input_seq = torch.cat((input_seq, output[-1].unsqueeze(0)), dim=0)
+		# 	train_batch(input_seq, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
+
 	return
 
 ##########################################
