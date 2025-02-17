@@ -119,21 +119,38 @@ def main(
 
 		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
 
-		 # Decrease teacher forcing ratio
-		teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
+		#  Decrease teacher forcing ratio
+		# teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
 
 		# Print loss
 		if epoch in epochs_snapshot:
 			print(f'Epoch {epoch}', end='   ')
 			for test_task, results in zip(test_tasks, results_list):
 				if test_task == 'RNNClass' or test_task == 'RNNAuto':
-					meanval=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
-					print(f'{test_task} Loss Tr {meanval:.2f}', end='   ')
+					meanval_train=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+					meanval_test=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
+					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end='   ')
 		   
 				elif test_task == 'RNNPred':
 					losses = results['Loss'][epoch][0]
 					predicted_tokens = results['Retrieval'][epoch][0]
-					# print(predicted_tokens)
+
+					# Define ANSI escape codes for colors
+					GREEN = '\033[92m'
+					BLUE = '\033[94m'
+					RED = '\033[91m'
+					RESET = '\033[0m'
+
+					# Print predicted tokens with colors
+					for token in predicted_tokens:
+						if token in tokens_train:
+							print(f"{GREEN}{token}{RESET}", end=' ')
+						elif token in tokens_test:
+							print(f"{BLUE}{token}{RESET}", end=' ')
+						else:
+							print(f"{RED}{token}{RESET}", end=' ')
+					print()
+
 					tokens_train = [''.join(p) for p in tokens_train]
 					tokens_test = [''.join(p) for p in tokens_test]
 					tokens_other = [''.join(p) for p in tokens_other]
