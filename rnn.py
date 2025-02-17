@@ -120,7 +120,8 @@ def main(
 		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
 
 		#  Decrease teacher forcing ratio
-		# teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
+		# if teacher_forcing_ratio:
+		# 	teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
 
 		# Print loss
 		if epoch in epochs_snapshot:
