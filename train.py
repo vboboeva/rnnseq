@@ -42,11 +42,12 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	elif task == 'RNNAuto':
 		ht, latent, out_batch = model.forward(X_batch, delay=delay)
 		loss = loss_function(out_batch, X_batch)
-
-	# # adding L1 regularization to the loss
-	# if weight_decay > 0.:
-	# 	loss += weight_decay * torch.mean(torch.abs(model.h2h.weight))
-	# 	loss += .3 * weight_decay * torch.linalg.matrix_norm(model.h2h.weight, ord=2) / model.h2h.weight.shape[0]**2
+	
+	if weight_decay > 0.:
+		# adding L1 regularization to the loss
+		# loss += weight_decay * torch.mean(torch.abs(model.h2h.weight))
+		# adding L2 regularization to the loss
+		loss += weight_decay * torch.linalg.matrix_norm(model.h2h.weight, ord=2) / model.h2h.weight.shape[0]**2 #.3 *
 
 	loss.backward()
 	optimizer.step()
