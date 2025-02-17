@@ -96,8 +96,7 @@ def main(
 	# Set up the optimizer
 	optimizer = optim.Adam(
 			model.parameters(),
-			lr=learning_rate, weight_decay=0,
-		)
+			lr=learning_rate, weight_decay=0.) # Putting weight_decay nonzero here will apply it to all the weights in the model, not what we want
 
 	if task != 'RNNMulti':
 		test_tasks = [task]
