@@ -108,7 +108,6 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 	delay=0,
 	cue_size=1
 	):
-
 	if hasattr(model, 'set_task'):
 		model.set_task(task)
 	
@@ -157,14 +156,16 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 
 		# goes through each of the seq_start we want to predict
 		for i in range(0, len_next_letters):
-			
+
+			# define x as a sequence of one-hot vectors
+			# corresponding to the letters cued
 			x = torch.zeros((len(seq_start), alpha), dtype=torch.float32).to(model.device)
-			pos = [letter_to_index[w] for w in seq_start[i:]]
+			pos = [letter_to_index[w] for w in seq_start]
+
 			for k, p in enumerate(pos):
 				x[k,:] = F.one_hot(torch.tensor(p), alpha)
-			# y_pred should have dimensions 1 x L-1 x alpha, ours has dimension L x 1 x alpha, so permute
-			# x has to have dimensions (L, sizetrain, alpha)
-			_, y_pred = model.forward(x) #.permute(1,0,2)
+
+			_, y_pred = model.forward(x)
 
 			# last_letter_logits has dimension alpha
 			last_letter_logits = y_pred[-1,:]
