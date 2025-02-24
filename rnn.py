@@ -53,7 +53,22 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
+	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
+
+	# load classes indiscriminately
+	# if n_types > 0:
+	# 	types=types[:n_types]
+
+	# load classes so that they are unambiguously retrieved with a given cue size
+	group_dict = {t:t[:cue_size] for t in types}
+
+	types_all_n = generate_distinct_tuples(types, group_dict)
+
+	types_one_n = types_all_n[n_types]
+	types_chosen = list(types_one_n[0])
+	print(types_chosen)
+
+	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(types_chosen, alpha, L, m, n_types, letter_to_index)
 
 	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
 
