@@ -17,8 +17,8 @@ def replace_symbols (sequence, symbols):
 	n_sym_repl = len(np.array(list(symbols)))
 
 	assert n_sym_seq == n_sym_repl, \
-		f"Trying to replace {n_sym_seq} symbols in sequence "+ \
-		f"with {n_sym_repl} symbols"
+		"Trying to replace {n_sym_seq} symbols in sequence "+ \
+		"with {n_sym_repl} symbols"
 
 	_, id_list = np.unique(newseq, return_index=True)
 
@@ -71,36 +71,75 @@ def make_dicts(alpha):
 		index_to_letter[k] = values[i]
 	return letter_to_index, index_to_letter
 
-def load_tokens(alpha, L, m, n_types, letter_to_index):
+
+def generate_distinct_tuples (sequences: list, group_dict: dict):
+	'''
+	Generating all possible n-tuples made of n sequences all from
+	different groups.
+
+	sequences: list
+		classes prototypes, eg. ['aaab', 'abab', 'aabb']
+	
+	group_dict: dict
+		sequence-prototype to group dictionary.
+		Mapping of sequence (key) to the corresponding group (value).
+		It is defined beforehand based on some criterion, 
+		e.g. different length-2 cue, {'aaab': 'aa', 'abab': 'ab', 'aabb': 'aa'}
+	'''
+	# The maximum tuple size is given by the number of different groups
+	groups = list(set([group_dict[s] for s in sequences]))
+	n_max = len(groups)
+
+	# Create a list of lists with all tuples. A list for each length
+	# of the tuples.
+	# E.g. [
+	# 		[('aaab',), ('abab',), ('abab',)],			# 1-tuples
+	# 		[('aaab', 'abab',), ('aabb', 'abab',)]		# 2-tuples
+	# 	   ]
+	all_tuples = {1:[(s,) for s in sequences]}
+	for n in range(2, n_max+1):
+		# Go through all the (n-1)-tuples, and add sequences to create n-tuples.
+		# Use the auxiliary dictionary to check if the added sequence is compatible
+		# with the existing (n-1)-tuple.
+		_tuples = []
+		_groups = []
+		for t in all_tuples[n-1]:
+			for s in sequences:
+				# check that the sequence s is compatible with the tuple t
+				# to form an n-tuple. That is, if the group corresponding to s
+				# is not among the groups of the sequences in t
+				_missing_group = group_dict[s] not in [group_dict[_s] for _s in t]
+				if _missing_group:
+					_tuples.append(t+(s,))
+			
+			_tuples = list(set([tuple(sorted(list(_t))) for _t in _tuples]))		
+		# all_tuples.append(_tuples)
+		all_tuples[n] = _tuples
+	return all_tuples
+
+def load_tokens(types, alpha, L, m, n_types, letter_to_index):
 	# load types
-	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	all_tokens=[]
 	all_labels=[]
-	# load all the tokens corresponding to that type
-	if n_types > 0:
-		types=types[:n_types]
 
 	# all permutations of m letters in the alphabet
 	list_permutations=list(itertools.permutations(alphabet, m))
 
 	for t, type_ in enumerate(types):
+		# tokens = loadtxt('input/%s.txt'%type_, dtype='str')
 		tokens=[]
 		# loop over all permutations 
 		for perm in list_permutations:
-			# print('perm =', perm)
-			newseq=replace_symbols(type_, perm)
-
+			newseq = replace_symbols(type_, perm)
 			tokens.append(newseq)
-
-		# tokens = loadtxt('input/%s.txt'%type_, dtype='str')
 
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
 		all_tokens.append(tokens_arr)
 		all_labels.append(np.array(len(tokens_arr)*[t]))
 
 	all_tokens = np.vstack(all_tokens)
-	all_labels = np.hstack(all_labels)#.reshape(-1,1)
+	all_labels = np.hstack(all_labels)
 
 	# turn letters into one hot vectors
 	n_types = np.max(all_labels) + 1
@@ -125,6 +164,7 @@ def remove_subset(configurations, subset):
 	return np.array(filtered)
 
 def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
+	
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
 	n_test = len(all_tokens) - n_train
@@ -159,7 +199,6 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	y_test = y[test_ids, :]
 
 	tokens_train = all_tokens[train_ids, :]
-
 	tokens_test = all_tokens[test_ids, :]
 
 	labels_train = all_labels[train_ids]
@@ -264,6 +303,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				# For reconstruction task, Z is the reconstructed sequence
 
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+				
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
 					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
@@ -336,5 +376,5 @@ def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to
 # 				# print(accuracy_mean)
 
 # 				mydict[letter][position]['Loss'].append(loss_mean)
-# 				mydict[letter][position]['Accuracy'].append(accuracy_mean)				
+# 				mydict[letter][position]['Accuracy'].append(accuracy_mean)
 
