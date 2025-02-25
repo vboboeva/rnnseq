@@ -322,59 +322,30 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 					results['yh'][token][epoch][idx_ablate]=yh[0].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
 					results['latent'][token][epoch][idx_ablate]=yh[1].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
 
-def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set):
-    # Save the model state
-    torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
+def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test, tokens_other):
+	tokens_train = [''.join(p) for p in tokens_train]
+	tokens_test = [''.join(p) for p in tokens_test]
+	tokens_other = [''.join(p) for p in tokens_other]
 
-    for results, task in zip(results_list, test_tasks):
-        with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
-            pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+	# Define ANSI escape codes for colors
+	GREEN = '\033[92m'
+	BLUE = '\033[94m'
+	RED = '\033[91m'
+	RESET = '\033[0m'
+	# Print predicted tokens with colors
+	for token in predicted_tokens:
+		if token in tokens_train:
+			print(f"{GREEN}{token}{RESET}", end=' ')
+		elif token in tokens_test:
+			print(f"{BLUE}{token}{RESET}", end=' ')
+		else:
+			print(f"{RED}{token}{RESET}", end=' ')
 
-    with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
-        pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
+	retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
+	retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
+	retrieved_other = len([s for s in predicted_tokens if s in tokens_other])/len(predicted_tokens)
+	meanval_train=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
+	meanval_test=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
+	meanval_other=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_other])
 
-    with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
-        pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-# def Hypo1():
-# 	# HYPOTHESIS 1
-# 	mydict = {}
-# 	# Identify all sequences with letter in a given position
-# 	for letter in alphabet:
-# 		mydict.update({letter:{}})
-# 		# print('letter', letter)
-# 		for position in range(L):
-# 			# print('position', position)
-# 			mydict[letter].update({position:{}})
-# 			where = np.where(tokens_train[:, position] == letter)
-			
-# 			X = X_train.permute((1,0,2))
-# 			y = y_train
-# 			tokens = tokens_train
-
-# 			X = X[where]
-# 			y = y[where]
-# 			tokens = tokens_train[where]
-# 			# print('tokens', tokens)
-
-# 			mydict[letter][position].update({'Loss':[]})
-# 			mydict[letter][position].update({'Accuracy':[]})
-# 			# ablate units one by one, the zeroth element is with no ablation
-
-# 			for idx_ablate in range(n_hidden+1):
-
-# 				# print('ablating unit %s'%idx_ablate)
-# 				accuracy_mean=0
-# 				loss_mean=0
-# 				# Without and without ablation evaluate classification accuracy on this set of sequences
-# 				for (_X, _y, _token) in zip(X, y, tokens):
-# 					accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
-# 					accuracy_mean=accuracy_mean+accuracy
-# 					loss_mean=loss_mean+loss
-# 				accuracy_mean=accuracy_mean/np.shape(tokens)[0]
-# 				loss_mean=loss_mean/np.shape(tokens)[0]
-# 				# print(accuracy_mean)
-
-# 				mydict[letter][position]['Loss'].append(loss_mean)
-# 				mydict[letter][position]['Accuracy'].append(accuracy_mean)
-
+	print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f} Loss NonPatt {meanval_other:.2f}', end='   ')
