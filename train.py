@@ -53,7 +53,7 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	optimizer.step()
 	return
 
-def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0, teacher_forcing_ratio=0.5):
+def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
 
 	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
 		task_list = n_batches*[task]
@@ -81,20 +81,6 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 			model.set_task(_task)
 
 		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
-
-		# # Implement scheduled sampling
-		# use_teacher_forcing = random.random() < teacher_forcing_ratio
-		# # print(use_teacher_forcing)
-		# if use_teacher_forcing:
-		# 	train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
-		# else:
-		# 	# Use model's own predictions as inputs
-		# 	input_seq = X_batch[0].unsqueeze(0)
-			
-		# 	for t in range(1, X_batch.size(0)):
-		# 		_, output = model.forward(input_seq)
-		# 		input_seq = torch.cat((input_seq, output[-1].unsqueeze(0)), dim=0)
-		# 	train_batch(input_seq, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
 
 	return
 
