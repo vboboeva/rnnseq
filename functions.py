@@ -72,7 +72,7 @@ def make_dicts(alpha):
 	return letter_to_index, index_to_letter
 
 
-def generate_distinct_tuples (sequences: list, group_dict: dict):
+def generate_distinct_tuples (sequences: list, group_dict: dict, one_ntuple=False):
 	'''
 	Generating all possible n-tuples made of n sequences all from
 	different groups.
@@ -117,7 +117,7 @@ def generate_distinct_tuples (sequences: list, group_dict: dict):
 		all_tuples[n] = _tuples
 	return all_tuples
 
-def load_tokens(types, alpha, L, m, n_types, letter_to_index):
+def make_tokens(types, alpha, L, m, n_types, letter_to_index):
 	# load types
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	all_tokens=[]
@@ -127,17 +127,18 @@ def load_tokens(types, alpha, L, m, n_types, letter_to_index):
 	list_permutations=list(itertools.permutations(alphabet, m))
 
 	for t, type_ in enumerate(types):
-		# tokens = loadtxt('input/%s.txt'%type_, dtype='str')
 		tokens=[]
+		print(type_)
 		# loop over all permutations 
 		for perm in list_permutations:
+			print(perm)
 			newseq = replace_symbols(type_, perm)
 			tokens.append(newseq)
 
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
 		all_tokens.append(tokens_arr)
 		all_labels.append(np.array(len(tokens_arr)*[t]))
-
+	
 	all_tokens = np.vstack(all_tokens)
 	all_labels = np.hstack(all_labels)
 
@@ -145,6 +146,7 @@ def load_tokens(types, alpha, L, m, n_types, letter_to_index):
 	n_types = np.max(all_labels) + 1
 	X = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
 	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
+	
 	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
 		pos = [letter_to_index[letter] for letter in token]
 		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
@@ -153,17 +155,7 @@ def load_tokens(types, alpha, L, m, n_types, letter_to_index):
 	print('total number of tokens=', np.shape(all_tokens)[0])
 	return X, y, all_tokens, all_labels, np.shape(tokens)[0]
 
-def generate_configurations(L, alphabet):
-	configurations = list(product(alphabet, repeat=L))
-	configurations = np.vstack([np.array(list(config)) for config in configurations])    
-	return configurations
-
-def remove_subset(configurations, subset):
-	subset_as_arrays = [np.array(item) for item in subset]
-	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
-	return np.array(filtered)
-
-def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
+def split_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y, cue_size, n_types):
 	
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
@@ -173,6 +165,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	print('number of test', n_test)
 
 	torch.manual_seed(sim_datasplit)
+
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
 	for i, ids_type in enumerate(ids):
 		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
@@ -193,6 +186,8 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 		test_ids = find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
 		train_ids = np.setdiff1d(np.arange(len(all_tokens)), test_ids)
 	
+	# elif data_balance == 'unambiguous':
+
 	X_train = X[:, train_ids, :]
 	X_test = X[:, test_ids, :]
 	y_train = y[train_ids, :]
@@ -205,6 +200,16 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	labels_test = all_labels[test_ids]
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes
+
+def generate_configurations(L, alphabet):
+	configurations = list(product(alphabet, repeat=L))
+	configurations = np.vstack([np.array(list(config)) for config in configurations])    
+	return configurations
+
+def remove_subset(configurations, subset):
+	subset_as_arrays = [np.array(item) for item in subset]
+	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
+	return np.array(filtered)
 
 def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
 
