@@ -117,43 +117,61 @@ def generate_distinct_tuples (sequences: list, group_dict: dict, one_ntuple=Fals
 		all_tuples[n] = _tuples
 	return all_tuples
 
-def make_tokens(types, alpha, L, m, n_types, letter_to_index):
+def letter_to_seq(types, letters, L, alpha, letter_to_index):
+	n_types = len(types)
+	the_tokens=[]
+	the_labels=[]
+	for t, type_ in enumerate(types):
+		tokens=[]
+		# print(type_)
+		# loop over all permutations 
+		for perm in letters:
+			# print(perm)
+			newseq = replace_symbols(type_, perm)
+			tokens.append(newseq)
+		# print(tokens)
+		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
+		the_tokens.append(tokens_arr)
+		the_labels.append(np.array(len(tokens_arr)*[t]))
+
+	the_tokens = np.vstack(the_tokens)
+	the_labels = np.hstack(the_labels)
+
+	# turn letters into one hot vectors
+	X = torch.zeros((L, len(the_tokens), alpha), dtype=torch.float32)
+	y = torch.zeros((len(the_labels), n_types), dtype=torch.float32)
+	
+	for i, (token, label) in enumerate(zip(the_tokens, the_labels)):
+		pos = [letter_to_index[letter] for letter in token]
+		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
+		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	return the_tokens, the_labels, X, y
+
+def make_tokens(sim_datasplit, types, alpha, L, m, n_types, letter_to_index, class_amb, frac_train):
 	# load types
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
-	all_tokens=[]
-	all_labels=[]
+
+	torch.manual_seed(sim_datasplit)
 
 	# all permutations of m letters in the alphabet
 	list_permutations=list(itertools.permutations(alphabet, m))
 
-	for t, type_ in enumerate(types):
-		tokens=[]
-		print(type_)
-		# loop over all permutations 
-		for perm in list_permutations:
-			print(perm)
-			newseq = replace_symbols(type_, perm)
-			tokens.append(newseq)
+	if class_amb == False:
+		chunks = [list_permutations[i:i + alpha-1] for i in range(0, len(list_permutations), alpha-1)]
+		random.shuffle(chunks)
+		n = int(len(chunks)) - 1
+	else:
+		chunks = [list_permutations[i:i+1] for i in range(0, len(list_permutations))]
+		random.shuffle(chunks)
+		n = int(frac_train*len(chunks))
 
-		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
-		all_tokens.append(tokens_arr)
-		all_labels.append(np.array(len(tokens_arr)*[t]))
-	
-	all_tokens = np.vstack(all_tokens)
-	all_labels = np.hstack(all_labels)
+	train_letters = [item for sublist in chunks[:n] for item in sublist]
+	tokens_train, labels_train, X_train, y_train = letter_to_seq(types, train_letters, L, alpha, letter_to_index)
 
-	# turn letters into one hot vectors
-	n_types = np.max(all_labels) + 1
-	X = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
-	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
-	
-	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
-		pos = [letter_to_index[letter] for letter in token]
-		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
-		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	test_letters = [item for sublist in chunks[n:] for item in sublist]
+	tokens_test, labels_test, X_test, y_test = letter_to_seq(types, test_letters, L, alpha, letter_to_index)
 
-	print('total number of tokens=', np.shape(all_tokens)[0])
-	return X, y, all_tokens, all_labels, np.shape(tokens)[0]
+	return X_train, y_train, tokens_train, labels_train, X_test, y_test, tokens_test, labels_test 
 
 def split_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y, cue_size, n_types):
 	

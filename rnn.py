@@ -67,21 +67,21 @@ def main(
 	group_dict = {t:t[:cue_size] for t in types}
 
 	types_all_n = generate_distinct_tuples(types, group_dict)
-
 	types_one_n = types_all_n[n_types]
+	# print(types_one_n)
 
 	with open('%s/classes.pkl'% (output_folder_name), 'wb') as handle:
 		pickle.dump(list(types_one_n), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 	for t, types_chosen in enumerate(list(types_one_n)):
 
-		print(types_chosen)
+		X_train, y_train, tokens_train, labels_train, X_test, y_test, tokens_test, labels_test = make_tokens(sim_datasplit, types_chosen, alpha, L, m, n_types, letter_to_index, class_amb, frac_train)
 
-		X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(types_chosen, alpha, L, m, n_types, letter_to_index)
-
-		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
+		# X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = split_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y, cue_size, n_types)
 
 		all_configurations = generate_configurations(L, np.array(alphabet))
+		all_tokens = np.vstack((tokens_train, tokens_test))
+		
 		tokens_other = remove_subset(all_configurations, all_tokens)
 		labels_other = -1*np.ones(len(tokens_other))
 
@@ -100,7 +100,7 @@ def main(
 		# Create the model
 		if task in ['RNNClass', 'RNNPred']:
 			if task == 'RNNClass':
-				output_size = num_classes
+				output_size = n_types
 			else:
 				output_size = alpha
 			model = RNN(alpha, n_hidden, n_layers, output_size, 
@@ -191,20 +191,20 @@ if __name__ == "__main__":
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
 		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 200, # number of training epochs
+		n_epochs = 300, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		n_types = 2, # # number of types to train net with: 1 takes just the first, -1 takes all types. Set minimum 2 for class task to make sense
+		n_types = 3, # number of types to train net with: 1 takes just the first, -1 takes all types. Set minimum 2 for class task to make sense
 		alpha = 10, # size of alphabet
 		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0.0, # fraction of dropped connections (reg)
 		weight_decay = 0.0, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 2, # number of letters to cue net with (prediction task only!!)
-		data_balance = 'class', # choose btw 'class' and 'whatwhere'
-		class_amb = True
+		cue_size = 3, # number of letters to cue net with (prediction task only!!)
+		data_balance = 'class', # choose btw 'class', 'whatwhere', and 'unambiguous'
+		class_amb = False
 	)
 
 	# parameters
@@ -223,7 +223,7 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 25
+	size = 1
 	for i in range(size):
 		row_index = index * size + i
 
