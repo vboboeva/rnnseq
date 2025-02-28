@@ -71,7 +71,18 @@ def make_dicts(alpha):
 		index_to_letter[k] = values[i]
 	return letter_to_index, index_to_letter
 
-def load_tokens(alpha, L, m, n_types, letter_to_index):
+def letter_to_onehot(all_tokens, all_labels, letter_to_index, L, alpha, n_types):
+	# turn letters into one hot vectors
+	X = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
+	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
+
+	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
+		pos = [letter_to_index[letter] for letter in token]
+		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
+		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	return X, y
+
+def make_tokens(data_balance, alpha, L, m, n_types, frac_train, letter_to_index, sim_datasplit):
 	# load types
 	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
@@ -88,43 +99,20 @@ def load_tokens(alpha, L, m, n_types, letter_to_index):
 		tokens=[]
 		# loop over all permutations 
 		for perm in list_permutations:
-			# print('perm =', perm)
 			newseq=replace_symbols(type_, perm)
-
 			tokens.append(newseq)
-
-		# tokens = loadtxt('input/%s.txt'%type_, dtype='str')
 
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
 		all_tokens.append(tokens_arr)
 		all_labels.append(np.array(len(tokens_arr)*[t]))
 
 	all_tokens = np.vstack(all_tokens)
-	all_labels = np.hstack(all_labels)#.reshape(-1,1)
+	all_labels = np.hstack(all_labels)
 
-	# turn letters into one hot vectors
-	n_types = np.max(all_labels) + 1
-	X = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
-	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
-	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
-		pos = [letter_to_index[letter] for letter in token]
-		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
-		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	num_tokens_onetype = np.shape(tokens)[0]
 
-	print('total number of tokens=', np.shape(all_tokens)[0])
-	return X, y, all_tokens, all_labels, np.shape(tokens)[0]
+	X, y = letter_to_onehot(all_tokens, all_labels, letter_to_index, L, alpha, n_types)
 
-def generate_configurations(L, alphabet):
-	configurations = list(product(alphabet, repeat=L))
-	configurations = np.vstack([np.array(list(config)) for config in configurations])    
-	return configurations
-
-def remove_subset(configurations, subset):
-	subset_as_arrays = [np.array(item) for item in subset]
-	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
-	return np.array(filtered)
-
-def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y):
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
 	n_test = len(all_tokens) - n_train
@@ -133,6 +121,7 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	print('number of test', n_test)
 
 	torch.manual_seed(sim_datasplit)
+
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
 	for i, ids_type in enumerate(ids):
 		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
@@ -141,7 +130,6 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	n_train_type = n_train // num_classes
 
 	if data_balance == 'class':
-
 		train_ids = ids[:, :n_train_type].reshape(-1)
 		test_ids = ids[:, n_train_type:].reshape(-1)
 
@@ -159,7 +147,6 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 	y_test = y[test_ids, :]
 
 	tokens_train = all_tokens[train_ids, :]
-
 	tokens_test = all_tokens[test_ids, :]
 
 	labels_train = all_labels[train_ids]
@@ -167,7 +154,17 @@ def make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes
 
-def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot):
+def generate_configurations(L, alphabet):
+	configurations = list(product(alphabet, repeat=L))
+	configurations = np.vstack([np.array(list(config)) for config in configurations])    
+	return configurations
+
+def remove_subset(configurations, subset):
+	subset_as_arrays = [np.array(item) for item in subset]
+	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
+	return np.array(filtered)
+
+def make_results_dict(which_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot):
 
 	def make_class_auto():
 		results = {}
@@ -194,13 +191,6 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 						if ablate == True: 		
 							for unit_ablated in range(1, n_hidden + 1):
 								results[measure][token][epoch].update({unit_ablated:[]})
-			set_ = 'other'
-			tokens = [''.join(token) for token in tokens_other]
-			labels = labels_other
-
-			for token, label in (zip(tokens, labels)):
-				token_to_set.update({token:set_}) 
-				token_to_type.update({token:label})
 			
 		return results, token_to_type, token_to_set
 	
@@ -211,7 +201,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, tokens_other, label
 		for measure in ['Loss', 'Retrieval', 'yh']:
 			results.update({measure:{}}) 
 
-			for set_, tokens, labels in (zip(['train','test','other'], [tokens_train, tokens_test, tokens_other], [labels_train, labels_test, labels_other])):
+			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
 
 				tokens = [''.join(token) for token in tokens]
 			
@@ -296,45 +286,34 @@ def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to
     with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
         pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-# def Hypo1():
-# 	# HYPOTHESIS 1
-# 	mydict = {}
-# 	# Identify all sequences with letter in a given position
-# 	for letter in alphabet:
-# 		mydict.update({letter:{}})
-# 		# print('letter', letter)
-# 		for position in range(L):
-# 			# print('position', position)
-# 			mydict[letter].update({position:{}})
-# 			where = np.where(tokens_train[:, position] == letter)
-			
-# 			X = X_train.permute((1,0,2))
-# 			y = y_train
-# 			tokens = tokens_train
+def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test):
 
-# 			X = X[where]
-# 			y = y[where]
-# 			tokens = tokens_train[where]
-# 			# print('tokens', tokens)
+	tokens_train = [''.join(p) for p in tokens_train]
+	tokens_test = [''.join(p) for p in tokens_test]
+	tokens_all = np.append(tokens_train, tokens_test)
 
-# 			mydict[letter][position].update({'Loss':[]})
-# 			mydict[letter][position].update({'Accuracy':[]})
-# 			# ablate units one by one, the zeroth element is with no ablation
+	# Define ANSI escape codes for colors
+	GREEN = '\033[92m'
+	BLUE = '\033[94m'
+	RED = '\033[91m'
+	RESET = '\033[0m'
 
-# 			for idx_ablate in range(n_hidden+1):
+	# Print predicted tokens with colors
+	for token in predicted_tokens:
+		if token in tokens_train:
+			print(f"{GREEN}{token}{RESET}", end=' ')
+		elif token in tokens_test:
+			print(f"{BLUE}{token}{RESET}", end=' ')
+		else:
+			print(f"{RED}{token}{RESET}", end=' ')
 
-# 				# print('ablating unit %s'%idx_ablate)
-# 				accuracy_mean=0
-# 				loss_mean=0
-# 				# Without and without ablation evaluate classification accuracy on this set of sequences
-# 				for (_X, _y, _token) in zip(X, y, tokens):
-# 					accuracy, loss, yh = test(_X, _y, _token, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate, ablate, n_hidden)
-# 					accuracy_mean=accuracy_mean+accuracy
-# 					loss_mean=loss_mean+loss
-# 				accuracy_mean=accuracy_mean/np.shape(tokens)[0]
-# 				loss_mean=loss_mean/np.shape(tokens)[0]
-# 				# print(accuracy_mean)
+	retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
+	retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
+	retrieved_other = len([s for s in predicted_tokens if s not in tokens_all])/len(predicted_tokens)
 
-# 				mydict[letter][position]['Loss'].append(loss_mean)
-# 				mydict[letter][position]['Accuracy'].append(accuracy_mean)				
+	meanval_train=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
+	meanval_test=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
+	meanval_other=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] not in tokens_all])
+
+	print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f} Loss NonPatt {meanval_other:.2f}', end='   ')
 

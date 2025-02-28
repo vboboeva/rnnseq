@@ -53,13 +53,7 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	X, y, all_tokens, all_labels, num_tokens_onetype = load_tokens(alpha, L, m, n_types, letter_to_index)
-
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = make_tokens(data_balance, all_tokens, all_labels, sim_datasplit, num_tokens_onetype, L, alpha, frac_train, X, y)
-
-	all_configurations = generate_configurations(L, np.array(alphabet))
-	tokens_other = remove_subset(all_configurations, all_tokens)
-	labels_other = -1*np.ones(len(tokens_other))
+	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes = make_tokens(data_balance, alpha, L, m, n_types, frac_train, letter_to_index, sim_datasplit)
 
 	# Train and test network
 	torch.manual_seed(sim)
@@ -100,13 +94,13 @@ def main(
 
 	if task != 'RNNMulti':
 		test_tasks = [task]
-		results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+		results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
 		results_list = [results]
 	else:
 		test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 		results_list = []
 		for test_task in test_tasks:
-			results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, tokens_other, labels_train, labels_test, labels_other, ablate, epochs_snapshot)
+			results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
 			results_list.append(results)
 
 	print('TRAINING NETWORK')
@@ -117,10 +111,6 @@ def main(
 				test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
 		train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
-
-		#  Decrease teacher forcing ratio
-		# if teacher_forcing_ratio:
-		# 	teacher_forcing_ratio = max(0.1, teacher_forcing_ratio * 0.99)
 
 		# Print loss
 		if epoch in epochs_snapshot:
@@ -135,39 +125,9 @@ def main(
 					losses = results['Loss'][epoch][0]
 					predicted_tokens = results['Retrieval'][epoch][0]
 
-					# Define ANSI escape codes for colors
-					GREEN = '\033[92m'
-					BLUE = '\033[94m'
-					RED = '\033[91m'
-					RESET = '\033[0m'
-
-					# Print predicted tokens with colors
-					for token in predicted_tokens:
-						if token in tokens_train:
-							print(f"{GREEN}{token}{RESET}", end=' ')
-						elif token in tokens_test:
-							print(f"{BLUE}{token}{RESET}", end=' ')
-						else:
-							print(f"{RED}{token}{RESET}", end=' ')
-					print()
-
-					tokens_train = [''.join(p) for p in tokens_train]
-					tokens_test = [''.join(p) for p in tokens_test]
-					tokens_other = [''.join(p) for p in tokens_other]
-					retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
-					retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
-					retrieved_other = len([s for s in predicted_tokens if s in tokens_other])/len(predicted_tokens)
-					meanval_train=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
-					meanval_test=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
-					meanval_other=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_other])
-					# print(f'{test_task} Loss Tr {meanval:.2f} frac_train {retrieved_train:.2f} frac_test {retrieved_test:.2f} frac_other{retrieved_other:.4f}', end='   ')
-					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f} Loss NonPatt {meanval_other:.2f}', end='   ')
+					print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test)
 			print('\n')
 						
-	# Quick and dirty plot of loss (comment when running on cluster, for local use)
-	# plot_weights(results, 5)
-	# plot_loss(n_types, n_hidden, ablate, results)
-	# plot_accuracy_ablation(n_hidden, alphabet, L, mydict)
 	return model, results_list, test_tasks, token_to_type, token_to_set
 
 ##################################################
