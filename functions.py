@@ -150,9 +150,19 @@ def make_dicts(alpha):
 		index_to_letter[k] = values[i]
 	return letter_to_index, index_to_letter
 
-def letter_to_onehot(all_tokens, all_labels, letter_to_index, L, alpha, n_types):
+def generate_random_strings(n, length, sim_datasplit):
+	random.seed(sim_datasplit)
+	strings = []
+	for _ in range(n):
+		# Generate a string by randomly choosing 'a' or 'b' for each character
+		s = ''.join(random.choice(['a', 'b']) for _ in range(length))
+		strings.append(s)
+	return strings
+
+def letter_to_onehot(all_tokens, all_labels, letter_to_index, cue_size, L, alpha, n_types):
 	# turn letters into one hot vectors
-	X = torch.zeros((L, len(all_tokens), alpha), dtype=torch.float32)
+	print(np.shape(all_tokens))
+	X = torch.zeros((cue_size+L, len(all_tokens), alpha), dtype=torch.float32)
 	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
 
 	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
@@ -161,15 +171,12 @@ def letter_to_onehot(all_tokens, all_labels, letter_to_index, L, alpha, n_types)
 		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
 	return X, y
 
-def make_tokens(data_balance, alpha, L, m, n_types, frac_train, letter_to_index, sim_datasplit):
+def make_tokens(types, data_balance, alpha, cue_size, L, m, n_types, frac_train, letter_to_index):
 	# load types
-	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(L, m), dtype='str')).reshape(-1)
+	
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	all_tokens=[]
 	all_labels=[]
-	# load all the tokens corresponding to that type
-	if n_types > 0:
-		types=types[:n_types]
 
 	# all permutations of m letters in the alphabet
 	list_permutations=list(itertools.permutations(alphabet, m))
@@ -190,7 +197,7 @@ def make_tokens(data_balance, alpha, L, m, n_types, frac_train, letter_to_index,
 
 	num_tokens_onetype = np.shape(tokens)[0]
 
-	X, y = letter_to_onehot(all_tokens, all_labels, letter_to_index, L, alpha, n_types)
+	X, y = letter_to_onehot(all_tokens, all_labels, letter_to_index, cue_size, L, alpha, n_types)
 
 	# make train and test data
 	n_train = int(frac_train * len(all_tokens))
@@ -198,8 +205,6 @@ def make_tokens(data_balance, alpha, L, m, n_types, frac_train, letter_to_index,
 
 	print('number of train', n_train)
 	print('number of test', n_test)
-
-	torch.manual_seed(sim_datasplit)
 
 	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
 	for i, ids_type in enumerate(ids):
@@ -250,7 +255,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, labels_train, label
 		token_to_type = {}
 		token_to_set = {}
 
-		for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
+		for measure in ['Loss', 'Retrieval']:#, 'yh', 'latent']:
 			results.update({measure:{}}) 
 
 			for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
@@ -277,7 +282,7 @@ def make_results_dict(which_task, tokens_train, tokens_test, labels_train, label
 		results = {}
 		token_to_type = {}
 		token_to_set = {}
-		for measure in ['Loss', 'Retrieval', 'yh']:
+		for measure in ['Loss', 'Retrieval']: #, 'yh']:
 			results.update({measure:{}}) 
 
 			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
@@ -314,7 +319,6 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
 
 		X = X.permute((1,0,2))
-		# print("X after ", X.shape)
 
 		if ablate == False:
 			range_ablate=1
@@ -326,7 +330,6 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
-				# print('target', token)
 
 				# For the classification task, Z is the output class
 				# For the prediction task, Z is what has been predicted
@@ -336,34 +339,20 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
 					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
-					results['yh'][token][epoch][idx_ablate] = yh.detach().cpu().numpy()	 # hidden layer activity throughout sequence: L by n_hidden
+					# results['yh'][token][epoch][idx_ablate] = yh.detach().cpu().numpy()	 # hidden layer activity throughout sequence: L by n_hidden
 					# results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNPred':
 					results['Loss'][epoch][idx_ablate].append(loss) # loss for token retrieved
 					results['Retrieval'][epoch][idx_ablate].append(Z) # which token retrieved (Z)
-					results['yh'][epoch][idx_ablate].append(yh.detach().cpu().numpy())  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
+					# results['yh'][epoch][idx_ablate].append(yh.detach().cpu().numpy())  # collect statistics of hidden layer activity in sequence that gave rise to retrieval of token Z: (num_Z, L, N)
 					# results['Whh'].append(model.h2h.weight.detach().cpu().numpy().copy())
 
 				elif which_task == 'RNNAuto':
 					results['Loss'][token][epoch][idx_ablate]=loss
 					results['Retrieval'][token][epoch][idx_ablate]=Z # how input token was reconstructed
-					results['yh'][token][epoch][idx_ablate]=yh[0].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
-					results['latent'][token][epoch][idx_ablate]=yh[1].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
-
-def savefiles(output_folder_name, sim, model, results_list, test_tasks, token_to_type, token_to_set):
-    # Save the model state
-    torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
-
-    for results, task in zip(results_list, test_tasks):
-        with open('%s/results_task%s_sim%d.pkl'% (output_folder_name, task, sim), 'wb') as handle:
-            pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    with open('%s/token_to_set.pkl'% (output_folder_name), 'wb') as handle:
-        pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    with open('%s/token_to_type.pkl'% (output_folder_name), 'wb') as handle:
-        pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
+					# results['yh'][token][epoch][idx_ablate]=yh[0].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
+					# results['latent'][token][epoch][idx_ablate]=yh[1].detach().cpu().numpy() # latent layer activity throughout sequence: n_latent
 
 def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test):
 
