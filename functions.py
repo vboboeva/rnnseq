@@ -1,14 +1,93 @@
 import numpy as np
-from numpy import loadtxt
 import torch
 import torch.nn.functional as F
 import string
 import random
 import itertools
 from itertools import product
-import pickle
 from train import tokenwise_test
-from find_flat_distribution_subset import *
+# from find_flat_distribution_subset import *
+import numpy as np
+from collections import Counter, defaultdict
+# from pulp import LpProblem, LpVariable, lpSum, LpBinary, LpStatus
+
+# def check_feasibility(sequences, target_size):
+#     """
+#     Check if it's possible to achieve a perfectly flat distribution.
+    
+#     Parameters:
+#         sequences (list of str): The list of input sequences.
+#         target_size (int): The desired size of the subset.
+    
+#     Returns:
+#         bool: True if feasible, False otherwise.
+#     """
+#     num_positions = len(sequences[0])  # Length of each sequence
+#     alphabet = set(char for seq in sequences for char in seq)  # Unique letters
+#     target_frequency = target_size // len(alphabet)  # Target frequency per letter per position
+
+#     # Count letter occurrences at each position
+#     position_counts = {i: Counter(seq[i] for seq in sequences) for i in range(num_positions)}
+
+#     # Check if each letter has enough occurrences to meet the target frequency
+#     for i in range(num_positions):
+#         for char in alphabet:
+#             if position_counts[i][char] < target_frequency:
+#                 return False
+#     return True
+
+
+# def find_flat_distribution_subset_ip(sequences, target_size):
+#     """
+#     Finds a subset of sequences with a perfectly flat distribution using integer programming.
+    
+#     Parameters:
+#         sequences (list of str): The list of input sequences.
+#         target_size (int): The desired size of the subset.
+    
+#     Returns:
+#         list of str: A subset of sequences with a perfectly flat letter distribution.
+#     """
+#     num_positions = len(sequences[0])
+#     alphabet = set(char for seq in sequences for char in seq)
+#     target_frequency = target_size // len(alphabet)
+    
+#     # Create decision variables
+#     seq_vars = [LpVariable(f"seq_{i}", cat=LpBinary) for i in range(len(sequences))]
+    
+#     # Create the problem
+#     problem = LpProblem("PerfectFlatSubset", sense=1)
+    
+#     # Add constraints for each position and letter
+#     for i in range(num_positions):
+#         for char in alphabet:
+#             # Sum of occurrences of 'char' at position 'i' in selected sequences
+#             problem += (
+#                 lpSum(seq_vars[j] for j, seq in enumerate(sequences) if seq[i] == char) == target_frequency,
+#                 f"Flat_{i}_{char}",
+#             )
+    
+#     # Constraint to enforce the target size
+#     problem += lpSum(seq_vars) == target_size, "TargetSize"
+    
+#     # Solve the problem
+#     problem.solve()
+    
+#     # Check if a solution was found
+#     if LpStatus[problem.status] != "Optimal":
+#         raise ValueError("Cannot find a subset with a perfectly flat distribution.")
+    
+#     # Extract selected sequences
+#     selected_indices = [i for i, var in enumerate(seq_vars) if var.value() == 1]
+#     selected_sequences = np.array([sequences[i] for i in selected_indices])
+#     # print(selected_sequences)
+#     return selected_indices
+
+# # Example usage
+# sequences = ["ABCD", "BCDA", "ACBD", "DBCA", "CDBA", "DABC", "BACD", "CABD"]
+# target_size = 4
+# subset = find_perfect_flat_subset_ip(sequences, target_size)
+# print("Selected subset:", subset)
 
 def replace_symbols (sequence, symbols):
 	newseq=np.array(list(sequence))
