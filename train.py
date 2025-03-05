@@ -129,7 +129,7 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 			loss = loss_function(out[:-1], X[1:])
 			# CE between logits for retrieved sequence and token (input) -- NOT RELEVANT
 			cue = [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
-			predicted = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L-len(cue))
+			predicted = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L)
 			predicted = ''.join(predicted)
 
 		elif task == 'RNNClass':
