@@ -110,7 +110,7 @@ def main(
 			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 		
 		elif task == 'RNNAuto':
-			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L, device=device)
+			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L+cue_size, device=device)
 		
 		elif task == 'RNNMulti':
 			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
