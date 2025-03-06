@@ -17,7 +17,7 @@ from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 ###########################################
 
 def main(
-	n_types, n_hidden, sim, sim_datasplit,
+	L, n_types, n_hidden, sim, sim_datasplit,
 	# network parameters
 	n_layers=1,
 	n_latent=7,
@@ -113,7 +113,7 @@ def main(
 			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L+cue_size, device=device)
 		
 		elif task == 'RNNMulti':
-			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L+cue_size, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 
 		else:
 			raise ValueError(f"Model not recognized: {task}")
@@ -123,32 +123,28 @@ def main(
 				model.parameters(),
 				lr = learning_rate, weight_decay=0.) # Putting weight_decay nonzero here will apply it to all the weights in the model, not what we want
 
-		if task != 'RNNMulti':
-			test_tasks = [task]
-			results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
-			results_list = [results]
-		else:
+		if task == 'RNNMulti':
 			test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 			results_list = []
 			for test_task in test_tasks:
 				results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
 				results_list.append(results)
+		else:
+			test_tasks = [task]
+			results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
+			results_list = [results]
 
 		print('TRAINING NETWORK')
-
 		for epoch in range(n_epochs + 1):
+			
 			if epoch in epochs_snapshot:
+				print('epoch', epoch, test_tasks)
+
 				for test_task, results in zip(test_tasks, results_list):
 					test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
 
-			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
-
-			# Print loss
-			if epoch in epochs_snapshot:
-				print(f'Epoch {epoch}', end='   ')
-				for test_task, results in zip(test_tasks, results_list):
 					if test_task == 'RNNClass' or test_task == 'RNNAuto':
-						meanval_train=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+						meanval_train = np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
 						meanval_test=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
 						print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end='   ')
 			
@@ -156,15 +152,19 @@ def main(
 						losses = results['Loss'][epoch][0]
 						predicted_tokens = results['Retrieval'][epoch][0]
 
-						# print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test)
-				# print('\n')
-							
+						print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test)
+					else:
+						raise ValueError(f"Invalid task: {test_task}")
+					print('\n')
+
+			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay, teacher_forcing_ratio=teacher_forcing_ratio)
+	
 		print('SAVING RESULTS')
 		# Save the model state
 		# torch.save(model.state_dict(), '%s/model_state_sim%d.pth' % (output_folder_name, sim))
 
-		for results, task in zip(results_list, test_tasks):
-			with open('%s/results_task%s_sim%d_classcomb%d.pkl'% (output_folder_name, task, sim, t), 'wb') as handle:
+		for results, test_task in zip(results_list, test_tasks):
+			with open('%s/results_task%s_sim%d_classcomb%d.pkl'% (output_folder_name, test_task, sim, t), 'wb') as handle:
 				pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 		with open('%s/token_to_set_classcomb%d.pkl'% (output_folder_name, t), 'wb') as handle:
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
+		task = 'RNNMulti',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		model_filename = None, # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
@@ -193,11 +193,11 @@ if __name__ == "__main__":
 		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 100, # number of training epochs
+		n_epochs = 50, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		alpha = 15, # size of alphabet
+		alpha = 5, # size of alphabet
 		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
@@ -224,12 +224,12 @@ if __name__ == "__main__":
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 
-	size = 9
+	size = 1
 	for i in range(size):
 		row_index = index * size + i
 
 		L = int(params[row_index, L_col_index])
-		n_types = 8#int(params[row_index, n_types_col_index])
+		n_types = 2#int(params[row_index, n_types_col_index])
 		n_hidden = int(params[row_index, n_hidden_col_index])
 		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
 		sim = int(params[row_index, sim_col_index])
@@ -238,4 +238,4 @@ if __name__ == "__main__":
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		main(n_types, n_hidden, sim, sim_datasplit, **main_kwargs)
+		main(L, n_types, n_hidden, sim, sim_datasplit, **main_kwargs)
