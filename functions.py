@@ -336,6 +336,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				# For reconstruction task, Z is the reconstructed sequence
 
 				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+				
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
 					results['Retrieval'][token][epoch][idx_ablate] = Z # how token was classified
@@ -360,24 +361,20 @@ def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tok
 	tokens_test = [''.join(p) for p in tokens_test]
 	tokens_all = np.append(tokens_train, tokens_test)
 
-	# Define ANSI escape codes for colors
-	GREEN = '\033[92m'
-	BLUE = '\033[94m'
-	RED = '\033[91m'
-	RESET = '\033[0m'
+	# # Define ANSI escape codes for colors
+	# GREEN = '\033[92m'
+	# BLUE = '\033[94m'
+	# RED = '\033[91m'
+	# RESET = '\033[0m'
 
-	# Print predicted tokens with colors
-	for token in predicted_tokens:
-		if token in tokens_train:
-			print(f"{GREEN}{token}{RESET}", end=' ')
-		elif token in tokens_test:
-			print(f"{BLUE}{token}{RESET}", end=' ')
-		else:
-			print(f"{RED}{token}{RESET}", end=' ')
-
-	retrieved_train = len([s for s in predicted_tokens if s in tokens_train])/len(predicted_tokens)
-	retrieved_test = len([s for s in predicted_tokens if s in tokens_test])/len(predicted_tokens)
-	retrieved_other = len([s for s in predicted_tokens if s not in tokens_all])/len(predicted_tokens)
+	# # Print predicted tokens with colors
+	# for token in predicted_tokens:
+	# 	if token in tokens_train:
+	# 		print(f"{GREEN}{token}{RESET}", end=' ')
+	# 	elif token in tokens_test:
+	# 		print(f"{BLUE}{token}{RESET}", end=' ')
+	# 	else:
+	# 		print(f"{RED}{token}{RESET}", end=' ')
 
 	meanval_train=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
 	meanval_test=np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
