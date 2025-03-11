@@ -63,7 +63,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 		raise NotImplementedError(f"Task {task} not implemented")
 	
 	n_train = X_train.shape[1]
-
+	# print(task_list)
 	model.train()
 	# shuffle training data
 	_ids = torch.randperm(n_train)
@@ -128,9 +128,9 @@ def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_i
 
 		elif task == 'RNNAuto':
 			ht_, latent, out = model.forward(X, mask=mask, delay=delay)
+			
 			# loss is btw activation of output layer and input (target is input)
 			loss = loss_function(out, X)
-			# print(loss)
 			predicted = np.array(torch.argmax(out, dim=-1))
 			predicted = [index_to_letter[i] for i in predicted]
 			predicted = ''.join(predicted)
