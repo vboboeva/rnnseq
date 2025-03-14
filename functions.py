@@ -150,12 +150,13 @@ def make_dicts(alpha):
 		index_to_letter[k] = values[i]
 	return letter_to_index, index_to_letter
 
-def generate_random_strings(n, length, sim_datasplit):
+def generate_random_strings(m, n, length, sim_datasplit):
 	random.seed(sim_datasplit)
 	strings = []
 	for _ in range(n):
 		# Generate a string by randomly choosing 'a' or 'b' for each character
-		s = ''.join(random.choice(['a', 'b']) for _ in range(length))
+		alphabet = [string.ascii_lowercase[i] for i in range(m)]
+		s = ''.join(random.choice(alphabet) for _ in range(length))
 		strings.append(s)
 	return strings
 
