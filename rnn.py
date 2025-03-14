@@ -60,7 +60,7 @@ def main(
 		raise ValueError('Not enough types! Please adjust cue_size.')
 
 	torch.manual_seed(sim_datasplit)
-	types_suffix = generate_random_strings(len(types), L, sim_datasplit) 
+	types_suffix = generate_random_strings(m, len(types), L, sim_datasplit)
 	combined = [s1 + s2 for s1, s2 in zip(types, types_suffix)]
 	types = combined
 
