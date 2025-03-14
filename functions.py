@@ -160,84 +160,80 @@ def generate_random_strings(m, n, length, sim_datasplit):
 		strings.append(s)
 	return strings
 
-def letter_to_onehot(all_tokens, all_labels, letter_to_index, cue_size, L, alpha, n_types):
-	# turn letters into one hot vectors
-	print(np.shape(all_tokens))
-	X = torch.zeros((cue_size+L, len(all_tokens), alpha), dtype=torch.float32)
-	y = torch.zeros((len(all_labels), n_types), dtype=torch.float32)
+def letter_to_seq(types, letters, L, alpha, letter_to_index, cue_size):
 
-	for i, (token, label) in enumerate(zip(all_tokens, all_labels)):
-		pos = [letter_to_index[letter] for letter in token]
-		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
-		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
-	return X, y
-
-def make_tokens(types, data_balance, alpha, cue_size, L, m, n_types, frac_train, letter_to_index):
-	# load types
-	
-	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
-	all_tokens=[]
-	all_labels=[]
-
-	# all permutations of m letters in the alphabet
-	list_permutations=list(itertools.permutations(alphabet, m))
-
+	n_types = len(types)
+	the_tokens=[]
+	the_labels=[]
 	for t, type_ in enumerate(types):
 		tokens=[]
 		# loop over all permutations 
-		for perm in list_permutations:
-			newseq=replace_symbols(type_, perm)
+		for perm in letters:
+			newseq = replace_symbols(type_, perm)
 			tokens.append(newseq)
-
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
-		all_tokens.append(tokens_arr)
-		all_labels.append(np.array(len(tokens_arr)*[t]))
+		the_tokens.append(tokens_arr)
+		the_labels.append(np.array(len(tokens_arr)*[t]))
 
-	all_tokens = np.vstack(all_tokens)
-	all_labels = np.hstack(all_labels)
+	the_tokens = np.vstack(the_tokens)
+	the_labels = np.hstack(the_labels)
 
-	num_tokens_onetype = np.shape(tokens)[0]
-
-	X, y = letter_to_onehot(all_tokens, all_labels, letter_to_index, cue_size, L, alpha, n_types)
-
-	# make train and test data
-	n_train = int(frac_train * len(all_tokens))
-	n_test = len(all_tokens) - n_train
-
-	print('number of train', n_train)
-	print('number of test', n_test)
-
-	ids = torch.arange(len(all_tokens)).reshape(-1, num_tokens_onetype)
-	for i, ids_type in enumerate(ids):
-		ids[i] = torch.take(ids_type, torch.randperm(len(ids_type)))
-
-	num_classes = int(len(all_tokens) / num_tokens_onetype)
-	n_train_type = n_train // num_classes
-
-	if data_balance == 'class':
-		train_ids = ids[:, :n_train_type].reshape(-1)
-		test_ids = ids[:, n_train_type:].reshape(-1)
-
-	# search a set of sequences out of all_tokens such that a criterion is reached
-	elif data_balance == 'whatwhere':
-
-		print("Feasibility:", check_feasibility(all_tokens, n_test))
-
-		test_ids = find_flat_distribution_subset_ip(all_tokens, target_size=n_test)
-		train_ids = np.setdiff1d(np.arange(len(all_tokens)), test_ids)
+	# turn letters into one hot vectors
+	X = torch.zeros((L+cue_size, len(the_tokens), alpha), dtype=torch.float32)
+	y = torch.zeros((len(the_labels), n_types), dtype=torch.float32)
 	
-	X_train = X[:, train_ids, :]
-	X_test = X[:, test_ids, :]
-	y_train = y[train_ids, :]
-	y_test = y[test_ids, :]
+	for i, (token, label) in enumerate(zip(the_tokens, the_labels)):
+		pos = [letter_to_index[letter] for letter in token]
+		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
+		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	
+	return the_tokens, the_labels, X, y
 
-	tokens_train = all_tokens[train_ids, :]
-	tokens_test = all_tokens[test_ids, :]
+def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters):
+	# load types
+	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
+	torch.manual_seed(sim_datasplit)
 
-	labels_train = all_labels[train_ids]
-	labels_test = all_labels[test_ids]
+	# split into training and testing
+	if train_test_letters == 'Disjoint':
+		alphabet_shuffled = alphabet.copy()
+		random.shuffle(alphabet_shuffled)
 
-	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_classes
+		train_alphabet = alphabet_shuffled[:int(frac_train*len(alphabet))]
+		test_alphabet = alphabet_shuffled[int(frac_train*len(alphabet)):]
+
+		permutations_train=list(itertools.permutations(train_alphabet, m))
+		permutations_test=list(itertools.permutations(test_alphabet, m))
+		
+		train_letters = [permutations_train[i:i+1] for i in range(0, len(permutations_train))]
+		test_letters = [permutations_test[i:i+1] for i in range(0, len(permutations_test))]
+
+		train_letters = [item for sublist in train_letters for item in sublist]
+		test_letters = [item for sublist in test_letters for item in sublist]
+
+	if train_test_letters == 'SemiOverlapping':
+		# all m-tuple permutations of letters in the alphabet
+		list_permutations=list(itertools.permutations(alphabet, m))
+		chunks = [list_permutations[i:i+1] for i in range(0, len(list_permutations))]
+		random.shuffle(chunks)
+		n = int(frac_train*len(chunks))
+		train_letters = [item for sublist in chunks[:n] for item in sublist]
+		test_letters = [item for sublist in chunks[n:] for item in sublist]
+
+	elif train_test_letters == 'Overlapping':
+		list_permutations=list(itertools.permutations(alphabet, m))
+		chunks = [list_permutations[i:i + alpha-1] for i in range(0, len(list_permutations), alpha-1)]
+		random.shuffle(chunks)
+		n = int(len(chunks)) - 1
+
+		train_letters = [item for sublist in chunks[:n] for item in sublist]
+		test_letters = [item for sublist in chunks[n:] for item in sublist]
+	
+	tokens_train, labels_train, X_train, y_train = letter_to_seq(types, train_letters, L, alpha, letter_to_index, cue_size)
+
+	tokens_test, labels_test, X_test, y_test = letter_to_seq(types, test_letters, L, alpha, letter_to_index, cue_size)
+
+	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
 def generate_configurations(L, alphabet):
 	configurations = list(product(alphabet, repeat=L))
