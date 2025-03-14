@@ -82,7 +82,7 @@ def main(
 	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
 
 	for t, types_chosen in enumerate(list(type_combinations)):
-		
+		num_classes = len(types_chosen)		
 		if from_file != []:
 			model_filename = '%s/model_state_sim%d_classcomb%d.pth'%(input_folder_name, sim, t) # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		else:
