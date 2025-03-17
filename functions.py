@@ -211,7 +211,7 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 		train_letters = [item for sublist in train_letters for item in sublist]
 		test_letters = [item for sublist in test_letters for item in sublist]
 
-	if train_test_letters == 'SemiOverlapping':
+	elif train_test_letters == 'SemiOverlapping':
 		# all m-tuple permutations of letters in the alphabet
 		list_permutations=list(itertools.permutations(alphabet, m))
 		chunks = [list_permutations[i:i+1] for i in range(0, len(list_permutations))]
@@ -228,6 +228,8 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 
 		train_letters = [item for sublist in chunks[:n] for item in sublist]
 		test_letters = [item for sublist in chunks[n:] for item in sublist]
+	else:
+		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
 	
 	tokens_train, labels_train, X_train, y_train = letter_to_seq(types, train_letters, L, alpha, letter_to_index, cue_size)
 
