@@ -160,11 +160,11 @@ def generate_random_strings(m, n, length, sim_datasplit):
 		strings.append(s)
 	return strings
 
-def letter_to_seq(types, letters, L, alpha, letter_to_index, cue_size):
+def letter_to_seq(types, letters):
 
-	n_types = len(types)
 	the_tokens=[]
 	the_labels=[]
+
 	for t, type_ in enumerate(types):
 		tokens=[]
 		# loop over all permutations 
@@ -178,22 +178,37 @@ def letter_to_seq(types, letters, L, alpha, letter_to_index, cue_size):
 	the_tokens = np.vstack(the_tokens)
 	the_labels = np.hstack(the_labels)
 
+	return the_tokens, the_labels
+
+def seq_to_vectors(tokens, labels, L, alpha, letter_to_index, cue_size, n_types, noise_level):
+	if noise_level > 0.0:
+		alphabet_new = np.unique(tokens)  # Return sorted letters as a string
+		# print(alphabet_new)
+		# Add noise to the input
+		tokens_noisy = tokens.copy()
+		for i, token in enumerate(tokens):
+			for j, letter in enumerate(token):
+				if random.random() < noise_level:  
+					# Choose a new letter different from the current one
+					new_letter = random.choice([l for l in alphabet_new if l != token[j]])
+					tokens_noisy[i, j] = new_letter
+
+		tokens = tokens_noisy
 	# turn letters into one hot vectors
-	X = torch.zeros((L+cue_size, len(the_tokens), alpha), dtype=torch.float32)
-	y = torch.zeros((len(the_labels), n_types), dtype=torch.float32)
-	
-	for i, (token, label) in enumerate(zip(the_tokens, the_labels)):
+	X = torch.zeros((L + cue_size, len(tokens), alpha), dtype=torch.float32)
+	y = torch.zeros((len(labels), n_types), dtype=torch.float32)
+	for i, (token, label) in enumerate(zip(tokens, labels)):
 		pos = [letter_to_index[letter] for letter in token]
 		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
 		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
-	
-	return the_tokens, the_labels, X, y
 
-def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters):
+	return X, y
+
+def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, noise_level=0.0):
 	# load types
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	torch.manual_seed(sim_datasplit)
-
+	print('noise_level', noise_level)
 	# split into training and testing
 	if train_test_letters == 'Disjoint':
 		alphabet_shuffled = alphabet.copy()
@@ -231,14 +246,18 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 	else:
 		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
 	
-	tokens_train, labels_train, X_train, y_train = letter_to_seq(types, train_letters, L, alpha, letter_to_index, cue_size)
+	tokens_train, labels_train = letter_to_seq(types, train_letters)
+		
+	X_train, y_train = seq_to_vectors(tokens_train, labels_train, L, alpha, letter_to_index, cue_size, len(types), noise_level)
+	
+	tokens_test, labels_test = letter_to_seq(types, test_letters)
 
-	tokens_test, labels_test, X_test, y_test = letter_to_seq(types, test_letters, L, alpha, letter_to_index, cue_size)
+	X_test, y_test = seq_to_vectors(tokens_test, labels_test, L, alpha, letter_to_index, cue_size, len(types), noise_level=0.0)
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
 def generate_configurations(L, alphabet):
-	configurations = list(product(alphabet, repeat=L))
+	configurations = list(product(alphabet, repeat = L))
 	configurations = np.vstack([np.array(list(config)) for config in configurations])    
 	return configurations
 
