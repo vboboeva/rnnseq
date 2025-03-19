@@ -44,6 +44,7 @@ def main(
 	data_balance='class',
 	teacher_forcing_ratio=0.5,  # Add teacher forcing ratio parameter
 	train_test_letters='Overlapping',
+	noise_level=0.00
 ):
 	print('TASK', task)
 	print('DATASPLIT NO', sim_datasplit)
@@ -90,7 +91,7 @@ def main(
 
 		print('types_chosen', types_chosen)
 
-		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(sim_datasplit, types_chosen, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters)
+		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(sim_datasplit, types_chosen, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, noise_level)
 
 		# Train and test network
 		torch.manual_seed(sim)
@@ -212,7 +213,8 @@ if __name__ == "__main__":
 		cue_size = 4, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class', # choose btw 'class' and 'whatwhere'
 		teacher_forcing_ratio = 1.,  # Add teacher forcing ratio parameter
-		train_test_letters = 'SemiOverlapping' # choose btw 'Disjoint' and 'Overlapping' and 'SemiOverlapping'	
+		train_test_letters = 'Overlapping', # choose btw 'Disjoint' and 'Overlapping' and 'SemiOverlapping'
+		noise_level = 0.5 # probability of finding an error in a given train sequence
 	)
 
 	# parameters
