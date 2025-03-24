@@ -4,11 +4,11 @@ import torch.nn.functional as F
 import string
 import random
 import itertools
-from itertools import product
 from train import tokenwise_test
-# from find_flat_distribution_subset import *
 import numpy as np
-from collections import Counter, defaultdict
+from collections import defaultdict
+# from find_flat_distribution_subset import *
+
 # from pulp import LpProblem, LpVariable, lpSum, LpBinary, LpStatus
 
 # def check_feasibility(sequences, target_size):
@@ -92,8 +92,9 @@ from collections import Counter, defaultdict
 def replace_symbols (sequence, symbols):
 	newseq=np.array(list(sequence))
 
-	n_sym_seq = len(np.unique(newseq))
-	n_sym_repl = len(np.array(list(symbols)))
+	unique_symbols = np.unique(newseq)  # Compute once
+	n_sym_seq = len(unique_symbols)
+	n_sym_repl = len(symbols)  # Directly use len()
 
 	assert n_sym_seq == n_sym_repl, \
 		f"Trying to replace {n_sym_seq} symbols in sequence "+ \
@@ -116,48 +117,33 @@ def replace_symbols (sequence, symbols):
 # take only training sequences and repeat some of them 
 def make_repetitions(tokens_train, X_train, n_repeats):
 
-	tokens_train_repeated=[]
-	X_train_repeated=[]
+	tokens_train_repeated = []
+	X_train_repeated = []
 
 	for i in range(len(tokens_train)):
+		random_number = random.randint(1, n_repeats)
+		tokens_train_repeated.append(np.tile(tokens_train[i], (random_number, 1)))
+		X_train_repeated.append(np.repeat(X_train[:, i, :, np.newaxis], random_number, axis=2).permute(0,2,1))
 
-		random_number=random.randint(1, n_repeats)
-
-		X_tostack = (np.repeat(X_train[:, i, :, np.newaxis], random_number, axis = 2)).permute(0,2,1)
-		
-		if i == 0:
-			tokens_train_repeated = np.tile(tokens_train[i], (random_number, 1))
-			X_train_repeated = X_tostack
-
-		else:
-			tokens_train_repeated = np.vstack((tokens_train_repeated, np.tile(tokens_train[i], (random_number, 1))))
-			X_train_repeated = np.concatenate((X_train_repeated, X_tostack), axis = 1)
+	# Convert lists to arrays only once
+	tokens_train_repeated = np.vstack(tokens_train_repeated)
+	X_train_repeated = np.concatenate(X_train_repeated, axis=1)
 
 	return tokens_train_repeated, X_train_repeated
 
 # make a dictionary
 def make_dicts(alpha):
-	letter_to_index = {}
 	keys = list(string.ascii_lowercase)[:alpha]
 	values = np.arange(alpha)
-	for i, k in enumerate(keys):
-		letter_to_index[k] = values[i]
+	letter_to_index = dict(zip(keys, values))
+	index_to_letter = dict(zip(values, keys))
 
-	index_to_letter = {}
-	keys = np.arange(alpha)
-	values = list(string.ascii_lowercase)[:alpha]
-	for i, k in enumerate(keys):
-		index_to_letter[k] = values[i]
 	return letter_to_index, index_to_letter
 
 def generate_random_strings(m, n, length, sim_datasplit):
 	random.seed(sim_datasplit)
-	strings = []
-	for _ in range(n):
-		# Generate a string by randomly choosing 'a' or 'b' for each character
-		alphabet = [string.ascii_lowercase[i] for i in range(m)]
-		s = ''.join(random.choice(alphabet) for _ in range(length))
-		strings.append(s)
+	alphabet = [string.ascii_lowercase[i] for i in range(m)]
+	strings = [''.join(random.choices(alphabet, k=length)) for _ in range(n)]
 	return strings
 
 def letter_to_seq(types, letters):
@@ -168,11 +154,7 @@ def letter_to_seq(types, letters):
 	for t, (type_, letters_) in enumerate(zip(types, letters)):
 		tokens=[]
 		# loop over all permutations 
-		for perm in letters_:
-			newseq = replace_symbols(type_, perm)
-			tokens.append(newseq)
-			
-		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
+		tokens_arr = np.array([list(replace_symbols(type_, perm)) for perm in letters_])
 		the_tokens.append(tokens_arr)
 		the_labels.append(np.array(len(tokens_arr)*[t]))
 
@@ -200,10 +182,8 @@ def seq_to_vectors(tokens, labels, L, alpha, letter_to_index, cue_size, n_types,
 	# turn letters into one hot vectors
 	X = torch.zeros((L + cue_size, len(tokens), alpha), dtype=torch.float32)
 	y = torch.zeros((len(labels), n_types), dtype=torch.float32)
-	for i, (token, label) in enumerate(zip(tokens, labels)):
-		pos = [letter_to_index[letter] for letter in token]
-		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
-		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
+	positions = [[letter_to_index[letter] for letter in token] for token in tokens]
+	X[:, :, :] = F.one_hot(torch.tensor(positions, dtype=int), alpha).permute(1, 0, 2)
 	return X, y
 
 def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level):
@@ -228,17 +208,9 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 		all_permutations = list(itertools.permutations(alphabet, m))
 		all_permutations = [list(p) for p in all_permutations]  # Convert tuples to lists
 
-		train_letters = []
-		test_letters = []
-
 		# Divide permutations into completely disjoint train and test sets
-		for t in types:
-			if t == 0:
-				train_letters = [p for p in all_permutations if set(p).issubset(train_alpha)]
-				test_letters = [p for p in all_permutations if set(p).issubset(test_alpha)]
-			else:
-				train_letters.append([p for p in all_permutations if set(p).issubset(train_alpha)])
-				test_letters.append([p for p in all_permutations if set(p).issubset(test_alpha)])
+		train_letters = [[p for p in all_permutations if set(p).issubset(train_alpha)] for _ in types]
+		test_letters = [[p for p in all_permutations if set(p).issubset(test_alpha)] for _ in types]
 
 	elif train_test_letters == 'SemiOverlapping':
 
@@ -301,71 +273,65 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
-def make_results_dict(which_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot):
+def make_results_dict(which_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot, n_hidden=0):
+    """
+    Initializes a structured dictionary to store training/testing results.
+    
+    Args:
+        which_task (str): Task type ('RNNClass', 'RNNAuto', 'RNNPred').
+        tokens_train (list): List of training tokens.
+        tokens_test (list): List of testing tokens.
+        labels_train (list): List of training labels.
+        labels_test (list): List of testing labels.
+        ablate (bool): Whether ablation is used.
+        epochs_snapshot (list): List of epochs to track.
+        n_hidden (int): Number of hidden units (default 0).
+    
+    Returns:
+        dict: A structured dictionary for storing results.
+        dict: Mapping of tokens to their class labels.
+        dict: Mapping of tokens to their dataset (train/test).
+    """
 
-	def make_class_auto():
-		results = {}
-		token_to_type = {}
-		token_to_set = {}
+    # Create nested defaultdict structure to avoid redundant dict updates
+    results = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list if ablate else float))))
 
-		for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
-			results.update({measure:{}}) 
+    # Store mappings of tokens to dataset type and labels
+    token_to_type = {}
+    token_to_set = {}
 
-			for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+    # Define measures based on task type
+    if which_task in ['RNNClass', 'RNNAuto']:
+        measures = ['Loss', 'Retrieval', 'yh']
+        if which_task == 'RNNAuto':
+            measures.append('latent')  # Autoencoder-specific measure
+    elif which_task == 'RNNPred':
+        measures = ['Loss', 'Retrieval', 'yh']
+    else:
+        raise ValueError("Invalid task type. Must be 'RNNClass', 'RNNAuto', or 'RNNPred'.")
 
-				tokens = [''.join(token) for token in tokens]
-			
-				for token, label in (zip(tokens, labels)):
-					token_to_set.update({token:set_}) 
-					token_to_type.update({token:label})
+    # Prepare dataset mappings
+    for set_type, tokens, labels in zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test]):
+        tokens = [''.join(token) for token in tokens]  # Convert token lists to strings
 
-					results[measure].update({token:{}})
+        for token, label in zip(tokens, labels):
+            token_to_set[token] = set_type
+            token_to_type[token] = label
 
-					for epoch in epochs_snapshot:
-						results[measure][token].update({epoch:{}})
-						results[measure][token][epoch].update({0:[]})
-				
-						if ablate == True: 		
-							for unit_ablated in range(1, n_hidden + 1):
-								results[measure][token][epoch].update({unit_ablated:[]})
-			
-		return results, token_to_type, token_to_set
-	
-	def make_pred():
-		results = {}
-		token_to_type = {}
-		token_to_set = {}
-		for measure in ['Loss', 'Retrieval', 'yh']:
-			results.update({measure:{}}) 
+    # Initialize the results structure
+    for measure in measures:
+        for epoch in epochs_snapshot:
+            if which_task == 'RNNPred':
+                # Prediction task does not store per-token results
+                results[measure][epoch] = defaultdict(list)
+            else:
+                for token in token_to_set.keys():
+                    results[measure][token][epoch] = defaultdict(list if ablate else float)
 
-			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+    # Store weight matrix if applicable
+    results['Whh'] = []  # Placeholder for hidden-to-hidden weight matrices
 
-				tokens = [''.join(token) for token in tokens]
-			
-				for token, label in (zip(tokens, labels)):
-					token_to_set.update({token:set_}) 
-					token_to_type.update({token:label})
-
-			for epoch in epochs_snapshot:
-				results[measure].update({epoch:{}})
-				results[measure][epoch].update({0:[]})
-				
-				if ablate == True: 		
-					for unit_ablated in range(1, n_hidden+1):
-						results[measure][epoch].update({unit_ablated:[]})
-		
-		return results, token_to_type, token_to_set
-
-	if which_task == 'RNNClass' or which_task == 'RNNAuto':
-		# Set up the dictionary that will contain results for each token
-		results, token_to_type, token_to_set = make_class_auto()
-	
-	if which_task == 'RNNPred':
-		# Set up the dictionary that will contain results
-		results, token_to_type, token_to_set = make_pred()
-
-	results['Whh'] = []
-	return results, token_to_type, token_to_set
+    return results, token_to_type, token_to_set
 
 def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
 
