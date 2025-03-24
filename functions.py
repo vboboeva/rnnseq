@@ -165,12 +165,13 @@ def letter_to_seq(types, letters):
 	the_tokens=[]
 	the_labels=[]
 
-	for t, type_ in enumerate(types):
+	for t, (type_, letters_) in enumerate(zip(types, letters)):
 		tokens=[]
 		# loop over all permutations 
-		for perm in letters:
+		for perm in letters_:
 			newseq = replace_symbols(type_, perm)
 			tokens.append(newseq)
+			
 		tokens_arr = np.vstack([np.array(list(token_)) for token_ in tokens])
 		the_tokens.append(tokens_arr)
 		the_labels.append(np.array(len(tokens_arr)*[t]))
@@ -181,6 +182,7 @@ def letter_to_seq(types, letters):
 	return the_tokens, the_labels
 
 def seq_to_vectors(tokens, labels, L, alpha, letter_to_index, cue_size, n_types, noise_level):
+	# print(tokens)
 	if noise_level > 0.0:
 		alphabet_new = np.unique(tokens)  # Return sorted letters as a string
 		# print(alphabet_new)
@@ -192,8 +194,9 @@ def seq_to_vectors(tokens, labels, L, alpha, letter_to_index, cue_size, n_types,
 					# Choose a new letter different from the current one
 					new_letter = random.choice([l for l in alphabet_new if l != token[j]])
 					tokens_noisy[i, j] = new_letter
-
 		tokens = tokens_noisy
+	else:
+		pass
 	# turn letters into one hot vectors
 	X = torch.zeros((L + cue_size, len(tokens), alpha), dtype=torch.float32)
 	y = torch.zeros((len(labels), n_types), dtype=torch.float32)
@@ -201,70 +204,102 @@ def seq_to_vectors(tokens, labels, L, alpha, letter_to_index, cue_size, n_types,
 		pos = [letter_to_index[letter] for letter in token]
 		X[:,i,:] = F.one_hot(torch.tensor(pos, dtype=int), alpha)
 		y[i,:] = F.one_hot(torch.tensor([label]), n_types)
-
 	return X, y
 
-def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, noise_level=0.0):
+def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level):
+	print('letter_permutations_class', letter_permutations_class)
 	# load types
 	alphabet = [string.ascii_lowercase[i] for i in range(alpha)]
 	torch.manual_seed(sim_datasplit)
-	print('noise_level', noise_level)
+	
 	# split into training and testing
 	if train_test_letters == 'Disjoint':
-		alphabet_shuffled = alphabet.copy()
-		random.shuffle(alphabet_shuffled)
 
-		train_alphabet = alphabet_shuffled[:int(frac_train*len(alphabet))]
-		test_alphabet = alphabet_shuffled[int(frac_train*len(alphabet)):]
+	# Shuffle alphabet to ensure randomness in splitting
+		random.shuffle(alphabet)
 
-		permutations_train=list(itertools.permutations(train_alphabet, m))
-		permutations_test=list(itertools.permutations(test_alphabet, m))
-		
-		train_letters = [permutations_train[i:i+1] for i in range(0, len(permutations_train))]
-		test_letters = [permutations_test[i:i+1] for i in range(0, len(permutations_test))]
+		# Split the alphabet into completely disjoint sets
+		split_idx = int(len(alphabet) * frac_train)
 
-		train_letters = [item for sublist in train_letters for item in sublist]
-		test_letters = [item for sublist in test_letters for item in sublist]
+		train_alpha = set(alphabet[:split_idx])  # Letters reserved for train
+		test_alpha = set(alphabet[split_idx:])   # Letters reserved for test
+
+		# Generate all m-length permutations from the full alphabet
+		all_permutations = list(itertools.permutations(alphabet, m))
+		all_permutations = [list(p) for p in all_permutations]  # Convert tuples to lists
+
+		train_letters = []
+		test_letters = []
+
+		# Divide permutations into completely disjoint train and test sets
+		for t in types:
+			if t == 0:
+				train_letters = [p for p in all_permutations if set(p).issubset(train_alpha)]
+				test_letters = [p for p in all_permutations if set(p).issubset(test_alpha)]
+			else:
+				train_letters.append([p for p in all_permutations if set(p).issubset(train_alpha)])
+				test_letters.append([p for p in all_permutations if set(p).issubset(test_alpha)])
 
 	elif train_test_letters == 'SemiOverlapping':
-		# all m-tuple permutations of letters in the alphabet
-		list_permutations=list(itertools.permutations(alphabet, m))
-		chunks = [list_permutations[i:i+1] for i in range(0, len(list_permutations))]
-		random.shuffle(chunks)
-		n = int(frac_train*len(chunks))
-		train_letters = [item for sublist in chunks[:n] for item in sublist]
-		test_letters = [item for sublist in chunks[n:] for item in sublist]
 
+		# Generate all m-length permutations from the alphabet
+		all_permutations = list(itertools.permutations(alphabet, m))
+
+		# Convert tuples into lists (optional, if you prefer list representation)
+		all_permutations = [list(p) for p in all_permutations]
+
+		# Shuffle alphabet to ensure randomness
+		random.shuffle(alphabet)
+
+		# Split the alphabet into disjoint sets for train & test (first letter constraint)
+		split_idx = int(len(alphabet) * frac_train)
+		train_alpha = set(alphabet[:split_idx])  # First letters for train set
+		test_alpha = set(alphabet[split_idx:])   # First letters for test set
+
+		train_letters = []
+		test_letters = []
+
+		for t in types:
+			if t == 0:
+				# Divide permutations into train and test sets based on the first letter
+				train_letters = [p for p in all_permutations if p[0] in train_alpha]
+				test_letters = [p for p in all_permutations if p[0] in test_alpha]
+			else:
+				train_letters.append([p for p in all_permutations if p[0] in train_alpha])
+				test_letters.append([p for p in all_permutations if p[0] in test_alpha])
+	
 	elif train_test_letters == 'Overlapping':
-		list_permutations=list(itertools.permutations(alphabet, m))
-		chunks = [list_permutations[i:i + alpha-1] for i in range(0, len(list_permutations), alpha-1)]
-		random.shuffle(chunks)
-		n = int(len(chunks)) - 1
 
-		train_letters = [item for sublist in chunks[:n] for item in sublist]
-		test_letters = [item for sublist in chunks[n:] for item in sublist]
+		# make a list containing all permutations of m letters in the alphabet
+		list_permutations = list(itertools.permutations(alphabet, m))
+		list_permutations = [list(item) for item in list_permutations]
+		split_idx = int(frac_train*len(list_permutations)) 
+		
+		train_letters = []
+		test_letters = []
+		
+		for t in types:
+			# print(t, list_permutations)
+			if letter_permutations_class == 'Random':
+				random.shuffle(list_permutations)				
+			elif letter_permutations_class == 'Same':
+				pass
+			if t == 0:
+				train_letters = list_permutations[:split_idx]
+				test_letters = list_permutations[split_idx:]
+			else:
+				train_letters.append(list_permutations[:split_idx])
+				test_letters.append(list_permutations[split_idx:])
+
 	else:
 		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
 	
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
-		
-	X_train, y_train = seq_to_vectors(tokens_train, labels_train, L, alpha, letter_to_index, cue_size, len(types), noise_level)
-	
+	X_train, y_train = seq_to_vectors(tokens_train, labels_train, L, alpha, letter_to_index, cue_size, len(types), noise_level)		
 	tokens_test, labels_test = letter_to_seq(types, test_letters)
-
 	X_test, y_test = seq_to_vectors(tokens_test, labels_test, L, alpha, letter_to_index, cue_size, len(types), noise_level=0.0)
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
-
-def generate_configurations(L, alphabet):
-	configurations = list(product(alphabet, repeat = L))
-	configurations = np.vstack([np.array(list(config)) for config in configurations])    
-	return configurations
-
-def remove_subset(configurations, subset):
-	subset_as_arrays = [np.array(item) for item in subset]
-	filtered = [config for config in configurations if not any(np.array_equal(config, sub) for sub in subset_as_arrays)]
-	return np.array(filtered)
 
 def make_results_dict(which_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot):
 
