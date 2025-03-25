@@ -61,7 +61,7 @@ def main(
 	if len(types) < n_types:
 		raise ValueError('Not enough types! Please adjust cue_size.')
 
-	torch.manual_seed(sim_datasplit)
+	np.random.seed(sim_datasplit)
 	types_suffix = generate_random_strings(m, len(types), L, sim_datasplit)
 	combined = [s1 + s2 for s1, s2 in zip(types, types_suffix)]
 	types = combined
@@ -72,7 +72,7 @@ def main(
 
 	# if the number of possible combinations is too large, we just consider the first 100
 	if len(type_combinations) > 10:
-		random.shuffle(type_combinations)
+		np.random.shuffle(type_combinations)
 		type_combinations = type_combinations[:10]
 	else:
 		pass
