@@ -318,13 +318,38 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 			list_permutations[split_idx:] if t == 0 else list_permutations[split_idx:]
 			for t in types
 		]
+
+
 	else:
 		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
+
+	# CHECKING THAT THE SPLIT IS CORRECT
+
+	# train_letters = [[list(item) for item in sublist] for sublist in train_letters]
+	# train_letters = [item for sublist in train_letters for item in sublist]
+	# test_letters = [[list(item) for item in sublist] for sublist in test_letters]
+	# test_letters = [item for sublist in test_letters for item in sublist]
+	# print('TRAIN')
+	# print('train_letters', train_letters)
+	# unique1 = np.array(np.unique(np.array(train_letters)[:,0]))
+	# unique2 = np.array(np.unique(np.array(train_letters)[:,1]))
+	# print(unique1)
+	# print(unique2)
+	# print('TEST')
+	# print('test_letters', test_letters)
+	# unique1 = np.array(np.unique(np.array(test_letters)[:,0]))
+	# unique2 = np.array(np.unique(np.array(test_letters)[:,1]))
+	# print(unique1)
+	# print(unique2)
+	# exit()
 
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
 	X_train, y_train = seq_to_vectors(tokens_train, labels_train, alpha, letter_to_index, len(types), sim_datasplit, noise_level)
 	tokens_test, labels_test = letter_to_seq(types, test_letters)
 	X_test, y_test = seq_to_vectors(tokens_test, labels_test, alpha, letter_to_index, len(types), sim_datasplit, noise_level=0.0)
+
+	print('number of training tokens', len(tokens_train))
+	print('number of testing tokens', len(tokens_test))
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
