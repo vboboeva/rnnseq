@@ -55,7 +55,7 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	types = np.array(loadtxt('input/structures_L%d_m%d.txt'%(cue_size, m), dtype='str')).reshape(-1)
+	types = np.array(loadtxt('input/types_L%d_m%d.txt'%(cue_size, m), dtype='str')).reshape(-1)
 
 	# load all the tokens corresponding to that type
 	if len(types) < n_types:
