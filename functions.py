@@ -260,12 +260,11 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 	all_permutations = list(itertools.permutations(alphabet, m))
 	
 	np.random.seed(sim_datasplit) 
+	# Shuffle alphabet to ensure randomness in splitting
+	np.random.shuffle(alphabet)
 
 	# split into training and testing
 	if train_test_letters == 'Disjoint':
-
-	# Shuffle alphabet to ensure randomness in splitting
-		np.random.shuffle(alphabet)
 
 		# Split the alphabet into completely disjoint sets
 		split_idx = int(len(alphabet) * frac_train)
@@ -274,11 +273,10 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 		test_alpha = set(alphabet[split_idx:])   # Letters reserved for test
 
 		# Divide permutations into completely disjoint train and test sets
-		train_letters = [[p for p in all_permutations if set(p).issubset(train_alpha)] for _ in types]
-		test_letters = [[p for p in all_permutations if set(p).issubset(test_alpha)] for _ in types]
+		train_letters = [[p for p in all_permutations if set(p).issubset(train_alpha)] for t in types]
+		test_letters = [[p for p in all_permutations if set(p).issubset(test_alpha)] for t in types]
 
 	elif train_test_letters == 'SemiOverlapping':
-		np.random.shuffle(alphabet)
 		split_idx = int(len(alphabet) * frac_train)
 		train_alpha = set(alphabet[:split_idx])  # First letters for train set
 		test_alpha = set(alphabet[split_idx:])   # First letters for test set
