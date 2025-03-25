@@ -469,6 +469,21 @@ def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tok
 	tokens_test = [''.join(p) for p in tokens_test]
 	tokens_all = np.append(tokens_train, tokens_test)
 
+	# # Define ANSI escape codes for colors
+	# GREEN = '\033[92m'
+	# BLUE = '\033[94m'
+	# RED = '\033[91m'
+	# RESET = '\033[0m'
+
+	# # Print predicted tokens with colors
+	# for token in predicted_tokens:
+	# 	if token in tokens_train:
+	# 		print(f"{GREEN}{token}{RESET}", end=' ')
+	# 	elif token in tokens_test:
+	# 		print(f"{BLUE}{token}{RESET}", end=' ')
+	# 	else:
+	# 		print(f"{RED}{token}{RESET}", end=' ')
+
 	meanval_train = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
 	meanval_test = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
 	meanval_other = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] not in tokens_all])
