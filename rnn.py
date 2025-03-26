@@ -18,7 +18,7 @@ from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 ###########################################
 
 def main(
-	L, n_types, n_hidden, sim, sim_datasplit,
+	L, n_types, n_hidden, sim_id, split_id,
 	# network parameters
 	n_layers=1,
 	n_latent=7,
@@ -49,8 +49,8 @@ def main(
 	noise_level=0.0
 ):
 	print('TASK', task)
-	print('DATASPLIT NO', sim_datasplit)
-	print('SIMULATION NO', sim)
+	print('DATASPLIT NO', split_id)
+	print('SIMULATION NO', sim_id)
 	print('L=', L)
 
 	letter_to_index, index_to_letter = make_dicts(alpha)
@@ -63,8 +63,8 @@ def main(
 	if len(types) < n_types:
 		raise ValueError('Not enough types! Please adjust cue_size.')
 
-	np.random.seed(sim_datasplit)
-	types_suffix = generate_random_strings(m, len(types), L, sim_datasplit)
+	np.random.seed(split_id)
+	types_suffix = generate_random_strings(m, len(types), L, split_id)
 	combined = [s1 + s2 for s1, s2 in zip(types, types_suffix)]
 	types = combined
 
@@ -87,16 +87,16 @@ def main(
 	for t, types_chosen in enumerate(list(type_combinations)):
 		num_classes = len(types_chosen)		
 		if from_file != []:
-			model_filename = '%s/model_state_sim%d_classcomb%d.pth'%(input_folder_name, sim, t) # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
+			model_filename = '%s/model_state_sim%d_classcomb%d.pth'%(input_folder_name, sim_id, t) # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		else:
 			model_filename=None
 
 		print('types_chosen', types_chosen)
 
-		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(sim_datasplit, types_chosen, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
+		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(split_id, types_chosen, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
 
 		# Train and test network
-		torch.manual_seed(sim)
+		torch.manual_seed(sim_id)
 		n_batches = len(tokens_train) // batch_size
 
 		# n_epochs for which take a snapshot of neural activity
@@ -170,10 +170,10 @@ def main(
 	
 		print('SAVING RESULTS')
 		# Save the model state
-		torch.save(model.state_dict(), '%s/model_state_sim%d_classcomb%d.pth' % (output_folder_name, sim, t))
+		torch.save(model.state_dict(), '%s/model_state_sim%d_classcomb%d.pth' % (output_folder_name, sim_id, t))
 
 		for results, test_task in zip(results_list, test_tasks):
-			with open('%s/results_task%s_sim%d_classcomb%d.pkl'% (output_folder_name, test_task, sim, t), 'wb') as handle:
+			with open('%s/results_task%s_sim%d_classcomb%d.pkl'% (output_folder_name, test_task, sim_id, t), 'wb') as handle:
 				pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 		with open('%s/token_to_set_classcomb%d.pkl'% (output_folder_name, t), 'wb') as handle:
@@ -230,8 +230,8 @@ if __name__ == "__main__":
 	L_col_index = 0
 	n_types_col_index = 1
 	n_hidden_col_index = 2
-	sim_datasplit_col_index = 3
-	sim_col_index = 4
+	split_id_col_index = 3
+	sim_id_col_index = 4
 	index = int(sys.argv[1]) - 1
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
@@ -243,13 +243,13 @@ if __name__ == "__main__":
 		L = 2 #int(params[row_index, L_col_index])
 		n_types = 5 #int(params[row_index, n_types_col_index])
 		n_hidden = int(params[row_index, n_hidden_col_index])
-		sim_datasplit = int(params[row_index, sim_datasplit_col_index])
-		sim = int(params[row_index, sim_col_index])
+		split_id = int(params[row_index, split_id_col_index])
+		sim_id = int(params[row_index, sim_id_col_index])
 
-		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], sim_datasplit )
+		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
 
-		input_folder_name = 'TaskRNNPred_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs30_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % (n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], sim_datasplit )
+		input_folder_name = 'TaskRNNPred_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs30_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % (n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		main(L, n_types, n_hidden, sim, sim_datasplit, **main_kwargs)
+		main(L, n_types, n_hidden, sim_id, split_id, **main_kwargs)
