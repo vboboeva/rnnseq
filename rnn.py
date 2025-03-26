@@ -18,7 +18,7 @@ from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 ###########################################
 
 def main(
-	L, n_types, n_hidden, sim_id, split_id,
+	L, n_types, n_hidden, split_id,
 	# network parameters
 	n_layers=1,
 	n_latent=7,
@@ -50,7 +50,6 @@ def main(
 ):
 	print('TASK', task)
 	print('DATASPLIT NO', split_id)
-	print('SIMULATION NO', sim_id)
 	print('L=', L)
 
 	letter_to_index, index_to_letter = make_dicts(alpha)
@@ -87,7 +86,7 @@ def main(
 
 		num_classes = len(types_chosen)
 		if from_file != []:
-			model_filename = '%s/model_state_sim%d_classcomb%d.pth'%(input_folder_name, sim_id, t) # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
+			model_filename = '%s/model_state_classcomb%d.pth'%(input_folder_name, t) # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		else:
 			model_filename=None
 
@@ -169,10 +168,10 @@ def main(
 	
 		print('SAVING RESULTS')
 		# Save the model state
-		torch.save(model.state_dict(), '%s/model_state_sim%d_classcomb%d.pth' % (output_folder_name, sim_id, t))
+		torch.save(model.state_dict(), '%s/model_state_classcomb%d.pth' % (output_folder_name, t))
 
 		for results, test_task in zip(results_list, test_tasks):
-			with open('%s/results_task%s_sim%d_classcomb%d.pkl'% (output_folder_name, test_task, sim_id, t), 'wb') as handle:
+			with open('%s/results_task%s_classcomb%d.pkl'% (output_folder_name, test_task, t), 'wb') as handle:
 				pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 		with open('%s/token_to_set_classcomb%d.pkl'% (output_folder_name, t), 'wb') as handle:
@@ -193,20 +192,20 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
+		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
-		# model_filename = 'model_state_sim0_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
-		from_file = ['i2h', 'h2h'], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
-		to_freeze = ['i2h', 'h2h'], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
+		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
+		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
+		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
 		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 30, # number of training epochs
+		n_epochs = 100, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 15, # size of alphabet
-		snap_freq = 1, # snapshot of net activity every snap_freq epochs
+		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
@@ -230,7 +229,6 @@ if __name__ == "__main__":
 	n_types_col_index = 1
 	n_hidden_col_index = 2
 	split_id_col_index = 3
-	sim_id_col_index = 4
 	index = int(sys.argv[1]) - 1
 
 	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
@@ -243,10 +241,9 @@ if __name__ == "__main__":
 		n_types = 5 #int(params[row_index, n_types_col_index])
 		n_hidden = int(params[row_index, n_hidden_col_index])
 		split_id = int(params[row_index, split_id_col_index])
-		sim_id = int(params[row_index, sim_id_col_index])
 
 		# Set seeds
-		# np.random.seed(split_id)
+		np.random.seed(1990+split_id)
 
 		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
 
@@ -254,4 +251,4 @@ if __name__ == "__main__":
 
 		os.makedirs(output_folder_name, exist_ok=True)
 
-		main(L, n_types, n_hidden, sim_id, split_id, **main_kwargs)
+		main(L, n_types, n_hidden, split_id, **main_kwargs)
