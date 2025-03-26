@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-import random
 
 loss_functions = {
 	'RNNPred': {
@@ -53,7 +52,7 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	optimizer.step()
 	return
 
-def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter, task, weight_decay=0., delay=0):
+def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task, weight_decay=0., delay=0):
 
 	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
 		task_list = n_batches*[task]
@@ -66,7 +65,7 @@ def train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_siz
 	# print(task_list)
 	model.train()
 	# shuffle training data
-	_ids = torch.randperm(n_train)
+	_ids = np.random.permutation(n_train)
 
 	# training in batches
 	for batch, _task in enumerate(task_list):
@@ -102,7 +101,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 			for (_X, _y, token, label) in zip(X, y, tokens, labels):
 				token = ''.join(token)
 
-				Z, loss, yh = tokenwise_test(_X, _y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+				Z, loss, yh = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				if which_task == 'RNNClass':
 					results['Loss'][token][epoch][idx_ablate] = loss
@@ -120,7 +119,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 					results['yh'][token][epoch][idx_ablate] = yh[0].detach().cpu().numpy()
 					results['latent'][token][epoch][idx_ablate] = yh[1].detach().cpu().numpy()
 
-def tokenwise_test(X, y, token, label, whichset, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
+def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
 	delay=0,
 	cue_size=1
@@ -189,7 +188,8 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 			# applies a softmax to transform activations into a proba, has dimensions alpha
 			proba = torch.softmax(last_letter_logits, dim=0).detach().cpu().numpy()
 			# then samples randomly from that proba distribution 
-			letter_index = np.random.choice(len(last_letter_logits), p=proba)
+			# letter_index = np.random.choice(len(last_letter_logits), p=proba)
+			letter_index = np.argmax(proba)
 
 			# appends it into the sequence produced
 			seq_start.append(index_to_letter[letter_index])
