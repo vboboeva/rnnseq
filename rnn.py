@@ -63,8 +63,7 @@ def main(
 	if len(types) < n_types:
 		raise ValueError('Not enough types! Please adjust cue_size.')
 
-	np.random.seed(split_id)
-	types_suffix = generate_random_strings(m, len(types), L, split_id)
+	types_suffix = generate_random_strings(m, len(types), L)
 	combined = [s1 + s2 for s1, s2 in zip(types, types_suffix)]
 	types = combined
 
@@ -85,7 +84,8 @@ def main(
 	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
 
 	for t, types_chosen in enumerate(list(type_combinations)):
-		num_classes = len(types_chosen)		
+
+		num_classes = len(types_chosen)
 		if from_file != []:
 			model_filename = '%s/model_state_sim%d_classcomb%d.pth'%(input_folder_name, sim_id, t) # choose btw None or file of this format ('model_state_datasplit0_sim0.pth') if initializing state of model from file
 		else:
@@ -93,10 +93,9 @@ def main(
 
 		print('types_chosen', types_chosen)
 
-		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(split_id, types_chosen, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
+		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(types_chosen, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
 
 		# Train and test network
-		torch.manual_seed(sim_id)
 		n_batches = len(tokens_train) // batch_size
 
 		# n_epochs for which take a snapshot of neural activity
@@ -166,7 +165,7 @@ def main(
 						raise ValueError(f"Invalid task: {test_task}")
 					print('\n')
 
-			train(X_train, y_train, model, optimizer, objective, L, n_batches, batch_size, alphabet, letter_to_index, index_to_letter,  task=task, weight_decay=weight_decay, delay=delay)
+			train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
 	
 		print('SAVING RESULTS')
 		# Save the model state
@@ -245,6 +244,9 @@ if __name__ == "__main__":
 		n_hidden = int(params[row_index, n_hidden_col_index])
 		split_id = int(params[row_index, split_id_col_index])
 		sim_id = int(params[row_index, sim_id_col_index])
+
+		# Set seeds
+		# np.random.seed(split_id)
 
 		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
 
