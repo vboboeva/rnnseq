@@ -10,6 +10,7 @@ import itertools
 import pickle
 from functions import * 
 from train import train
+from train import test
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 
 ###########################################
