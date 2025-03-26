@@ -2,11 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import string
-import random
 import itertools
-from train import tokenwise_test
-import numpy as np
-from collections import defaultdict
 # from find_flat_distribution_subset import *
 
 # from pulp import LpProblem, LpVariable, lpSum, LpBinary, LpStatus
@@ -117,7 +113,7 @@ def replace_symbols(sequence, symbols):
 
 	return "".join(newseq)
 
-def make_repetitions(tokens_train, X_train, n_repeats, sim_datasplit):
+def make_repetitions(tokens_train, X_train, n_repeats):
 	"""
 	Efficiently repeats training tokens and tensors without using slow loops.
 
@@ -130,8 +126,6 @@ def make_repetitions(tokens_train, X_train, n_repeats, sim_datasplit):
 		np.ndarray: Repeated tokens.
 		torch.Tensor: Repeated tensor sequences.
 	"""
-	np.random.seed(sim_datasplit)
-
 	repeat_counts = np.random.randint(1, n_repeats + 1, size=len(tokens_train))
 	tokens_train_repeated = np.repeat(tokens_train, repeat_counts, axis=0)
 	X_train_repeated = X_train.repeat_interleave(torch.tensor(repeat_counts), dim=1)
@@ -156,7 +150,7 @@ def make_dicts(alpha):
 
 	return letter_to_index, index_to_letter
 
-def generate_random_strings(m, n, length, sim_datasplit):
+def generate_random_strings(m, n, length):
 	"""
 	Generates `n` random strings of given `length` using an alphabet of size `m`.
 
@@ -169,7 +163,6 @@ def generate_random_strings(m, n, length, sim_datasplit):
 	Returns:
 		list: List of randomly generated strings.
 	"""
-	np.random.seed(sim_datasplit)
 
 	alphabet = np.array([string.ascii_lowercase[i] for i in range(m)])
 	random_strings = np.random.choice(alphabet, size=(n, length))
@@ -201,7 +194,7 @@ def letter_to_seq(types, letters):
 
 	return the_tokens, the_labels
 
-def seq_to_vectors(tokens, labels, alpha, letter_to_index, n_types, sim_datasplit, noise_level=0.0):
+def seq_to_vectors(tokens, labels, alpha, letter_to_index, n_types, noise_level=0.0):
 	"""
 	Converts token sequences into one-hot encoded tensor representations efficiently.
 
@@ -219,7 +212,6 @@ def seq_to_vectors(tokens, labels, alpha, letter_to_index, n_types, sim_dataspli
 		torch.Tensor: One-hot encoded input tensor `X` of shape (sequence_length + cue_size, num_samples, alphabet_size).
 		torch.Tensor: One-hot encoded label tensor `y` of shape (num_samples, n_types).
 	"""
-	np.random.seed(sim_datasplit)
 	positions = np.vectorize(letter_to_index.get)(tokens)
 
 	if noise_level > 0.0:
@@ -234,12 +226,11 @@ def seq_to_vectors(tokens, labels, alpha, letter_to_index, n_types, sim_dataspli
 
 	return X, y
 
-def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level):
+def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level):
 	"""
 	Generates training and testing token sequences based on the specified split strategy.
 
 	Args:
-		sim_datasplit (int): Random seed for reproducibility.
 		types (list): List of sequence types.
 		alpha (int): Alphabet size.
 		cue_size (int): Cue size.
@@ -259,7 +250,6 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 	# Generate all m-length permutations from the full alphabet
 	all_permutations = list(itertools.permutations(alphabet, m))
 	
-	np.random.seed(sim_datasplit) 
 	# Shuffle alphabet to ensure randomness in splitting
 	np.random.shuffle(alphabet)
 
@@ -299,26 +289,26 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 		]
 		
 	elif train_test_letters == 'Overlapping':
-		# Shuffle list of all permutations
-		list_permutations = [list(item) for item in all_permutations]
-		np.random.shuffle(list_permutations)
-		split_idx = int(frac_train * len(list_permutations))
-
-		# Initialize empty lists
+		# make a list containing all permutations of m letters in the alphabet
+		list_permutations = list(itertools.permutations(alphabet, m))
+		list_permutations = [list(item) for item in list_permutations]
+		split_idx = int(frac_train*len(list_permutations)) 
+		
 		train_letters = []
 		test_letters = []
-
-		# Create the lists for each type
-		train_letters = [
-			list_permutations[:split_idx] if t == 0 else list_permutations[:split_idx]
-			for t in types
-		]
-
-		test_letters = [
-			list_permutations[split_idx:] if t == 0 else list_permutations[split_idx:]
-			for t in types
-		]
-
+		
+		for t in types:
+			# print(t, list_permutations)
+			if letter_permutations_class == 'Random':
+				np.random.shuffle(list_permutations)				
+			elif letter_permutations_class == 'Same':
+				pass
+			if t == 0:
+				train_letters = list_permutations[:split_idx]
+				test_letters = list_permutations[split_idx:]
+			else:
+				train_letters.append(list_permutations[:split_idx])
+				test_letters.append(list_permutations[split_idx:])
 
 	else:
 		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
@@ -344,9 +334,9 @@ def make_tokens(sim_datasplit, types, alpha, cue_size, L, m, frac_train, letter_
 	# exit()
 
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
-	X_train, y_train = seq_to_vectors(tokens_train, labels_train, alpha, letter_to_index, len(types), sim_datasplit, noise_level)
+	X_train, y_train = seq_to_vectors(tokens_train, labels_train, alpha, letter_to_index, len(types), noise_level)
 	tokens_test, labels_test = letter_to_seq(types, test_letters)
-	X_test, y_test = seq_to_vectors(tokens_test, labels_test, alpha, letter_to_index, len(types), sim_datasplit, noise_level=0.0)
+	X_test, y_test = seq_to_vectors(tokens_test, labels_test, alpha, letter_to_index, len(types), noise_level=0.0)
 
 	print('number of training tokens', len(tokens_train))
 	print('number of testing tokens', len(tokens_test))
