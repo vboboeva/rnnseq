@@ -255,7 +255,6 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	# split into training and testing
 	if train_test_letters == 'Disjoint':
-
 		# Split the alphabet into completely disjoint sets
 		split_idx = int(len(alphabet) * frac_train)
 
@@ -263,8 +262,8 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 		test_alpha = set(alphabet[split_idx:])   # Letters reserved for test
 
 		# Divide permutations into completely disjoint train and test sets
-		train_letters = [[p for p in all_permutations if set(p).issubset(train_alpha)] for t in types]
-		test_letters = [[p for p in all_permutations if set(p).issubset(test_alpha)] for t in types]
+		train_letters = [[p for p in all_permutations if set(p).issubset(train_alpha)] for _ in types]
+		test_letters = [[p for p in all_permutations if set(p).issubset(test_alpha)] for _ in types]
 
 	elif train_test_letters == 'SemiOverlapping':
 		split_idx = int(len(alphabet) * frac_train)
@@ -276,17 +275,8 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 		test_letters = []
 
 		# Create the lists for each type
-		train_letters = [
-			[p for p in all_permutations if p[0] in train_alpha] if t == 0 else 
-			[p for p in all_permutations if p[0] in train_alpha]
-			for t in types
-		]
-		
-		test_letters = [
-			[p for p in all_permutations if p[0] in test_alpha] if t == 0 else
-			[p for p in all_permutations if p[0] in test_alpha]
-			for t in types
-		]
+		train_letters = [[p for p in all_permutations if set(p[0]).issubset(train_alpha)] for _ in types]
+		test_letters = [[p for p in all_permutations if set(p[0]).issubset(test_alpha)] for _ in types]
 		
 	elif train_test_letters == 'Overlapping':
 		# make a list containing all permutations of m letters in the alphabet
@@ -309,7 +299,7 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 			else:
 				train_letters.append(list_permutations[:split_idx])
 				test_letters.append(list_permutations[split_idx:])
-
+	
 	else:
 		raise ValueError('train_test_letters should be Disjoint, SemiOverlapping, or Overlapping')
 
@@ -323,14 +313,14 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 	# print('train_letters', train_letters)
 	# unique1 = np.array(np.unique(np.array(train_letters)[:,0]))
 	# unique2 = np.array(np.unique(np.array(train_letters)[:,1]))
-	# print(unique1)
-	# print(unique2)
+	# print('unique1', unique1)
+	# print('unique2', unique2)
 	# print('TEST')
 	# print('test_letters', test_letters)
 	# unique1 = np.array(np.unique(np.array(test_letters)[:,0]))
 	# unique2 = np.array(np.unique(np.array(test_letters)[:,1]))
-	# print(unique1)
-	# print(unique2)
+	# print('unique1', unique1)
+	# print('unique2', unique2)
 	# exit()
 
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
