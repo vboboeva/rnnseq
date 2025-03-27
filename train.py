@@ -101,17 +101,17 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 			for (_X, _y, token) in zip(X, y, tokens):
 				token = ''.join(token)
 
-				Z, loss, yh = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+				Z, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
 				results['Loss'][token][epoch][idx_ablate] = loss
 				results['Retrieval'][token][epoch][idx_ablate] = Z
 
 				if which_task == 'RNNClass' or which_task == 'RNNPred':
-					results['yh'][token][epoch][idx_ablate] = yh.detach().cpu().numpy()
+					results['HiddenAct'][token][epoch][idx_ablate] = hidden.detach().cpu().numpy()
 				
 				elif which_task == 'RNNAuto':
-					results['yh'][token][epoch][idx_ablate] = yh[0].detach().cpu().numpy()
-					results['latent'][token][epoch][idx_ablate] = yh[1].detach().cpu().numpy()
+					results['HiddenAct'][token][epoch][idx_ablate] = hidden[0].detach().cpu().numpy()
+					results['Latent'][token][epoch][idx_ablate] = hidden[1].detach().cpu().numpy()
 
 def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation

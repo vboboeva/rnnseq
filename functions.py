@@ -333,13 +333,13 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
-def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot):
+def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots):
 
 	results = {}
 	token_to_type = {}
 	token_to_set = {}
 
-	for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
+	for measure in ['Loss', 'Retrieval', 'HiddenAct', 'LatentAct']:
 		results.update({measure:{}}) 
 
 		for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
@@ -352,7 +352,7 @@ def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hi
 
 				results[measure].update({token:{}})
 
-				for epoch in epochs_snapshot:
+				for epoch in epoch_snapshots:
 					results[measure][token].update({epoch:{}})
 					results[measure][token][epoch].update({0:[]})
 			

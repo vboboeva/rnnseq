@@ -98,7 +98,7 @@ def main(
 		n_batches = len(tokens_train) // batch_size
 
 		# n_epochs for which take a snapshot of neural activity
-		epochs_snapshot = np.arange(0, int(n_epochs)+1, snap_freq)
+		epoch_snapshots = np.arange(0, int(n_epochs)+1, snap_freq)
 
 		if drop_connect != 0.:
 			layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
@@ -134,17 +134,17 @@ def main(
 			test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 			results_list = []
 			for test_task in test_tasks:
-				results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot)
+				results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
 				results_list.append(results)
 		else:
 			test_tasks = [task]
-			results, token_to_type, token_to_set = make_results_dict( tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot)
+			results, token_to_type, token_to_set = make_results_dict( tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
 			results_list = [results]
 
 		print('TRAINING NETWORK')
 		for epoch in range(n_epochs + 1):
 			
-			if epoch in epochs_snapshot:
+			if epoch in epoch_snapshots:
 				print('epoch', epoch, test_tasks)
 
 				for test_task, results in zip(test_tasks, results_list):
