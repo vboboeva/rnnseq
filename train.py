@@ -87,9 +87,9 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 # 				test network 			 #
 ##########################################
 
-def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
+def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
 
-	for (whichset, X, y, tokens, labels) in zip(['train', 'test'], [X_train, X_test], [y_train, y_test], [tokens_train, tokens_test], [labels_train, labels_test]):
+	for (X, y, tokens) in zip([X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 		X = X.permute((1,0,2))
 
 		if ablate == False:
@@ -98,24 +98,18 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 			range_ablate = n_hidden + 1
 
 		for idx_ablate in range(range_ablate):
-			for (_X, _y, token, label) in zip(X, y, tokens, labels):
+			for (_X, _y, token) in zip(X, y, tokens):
 				token = ''.join(token)
 
 				Z, loss, yh = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
 
-				if which_task == 'RNNClass':
-					results['Loss'][token][epoch][idx_ablate] = loss
-					results['Retrieval'][token][epoch][idx_ablate] = Z
+				results['Loss'][token][epoch][idx_ablate] = loss
+				results['Retrieval'][token][epoch][idx_ablate] = Z
+
+				if which_task == 'RNNClass' or which_task == 'RNNPred':
 					results['yh'][token][epoch][idx_ablate] = yh.detach().cpu().numpy()
-
-				elif which_task == 'RNNPred':
-					results['Loss'][epoch][idx_ablate].append(loss)
-					results['Retrieval'][epoch][idx_ablate].append(Z)
-					results['yh'][epoch][idx_ablate].append(yh.detach().cpu().numpy())
-
+				
 				elif which_task == 'RNNAuto':
-					results['Loss'][token][epoch][idx_ablate] = loss
-					results['Retrieval'][token][epoch][idx_ablate] = Z
 					results['yh'][token][epoch][idx_ablate] = yh[0].detach().cpu().numpy()
 					results['latent'][token][epoch][idx_ablate] = yh[1].detach().cpu().numpy()
 

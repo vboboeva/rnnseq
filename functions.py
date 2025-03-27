@@ -333,107 +333,32 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
-def make_results_dict(which_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot):
+def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot):
 
-	def make_class_auto():
-		results = {}
-		token_to_type = {}
-		token_to_set = {}
+	results = {}
+	token_to_type = {}
+	token_to_set = {}
 
-		for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
-			results.update({measure:{}}) 
+	for measure in ['Loss', 'Retrieval', 'yh', 'latent']:
+		results.update({measure:{}}) 
 
-			for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+		for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
 
-				tokens = [''.join(token) for token in tokens]
-			
-				for token, label in (zip(tokens, labels)):
-					token_to_set.update({token:set_}) 
-					token_to_type.update({token:label})
-
-					results[measure].update({token:{}})
-
-					for epoch in epochs_snapshot:
-						results[measure][token].update({epoch:{}})
-						results[measure][token][epoch].update({0:[]})
-				
-						if ablate == True: 		
-							for unit_ablated in range(1, n_hidden + 1):
-								results[measure][token][epoch].update({unit_ablated:[]})
-			
-		return results, token_to_type, token_to_set
-	
-	def make_pred():
-		results = {}
-		token_to_type = {}
-		token_to_set = {}
-		for measure in ['Loss', 'Retrieval', 'yh']:
-			results.update({measure:{}}) 
-
-			for set_, tokens, labels in (zip(['train','test'], [tokens_train, tokens_test], [labels_train, labels_test])):
-
-				tokens = [''.join(token) for token in tokens]
-			
-				for token, label in (zip(tokens, labels)):
-					token_to_set.update({token:set_}) 
-					token_to_type.update({token:label})
-
-			for epoch in epochs_snapshot:
-				results[measure].update({epoch:{}})
-				results[measure][epoch].update({0:[]})
-				
-				if ablate == True: 		
-					for unit_ablated in range(1, n_hidden+1):
-						results[measure][epoch].update({unit_ablated:[]})
+			tokens = [''.join(token) for token in tokens]
 		
-		return results, token_to_type, token_to_set
+			for token, label in (zip(tokens, labels)):
+				token_to_set.update({token:set_}) 
+				token_to_type.update({token:label})
 
-	if which_task == 'RNNClass' or which_task == 'RNNAuto':
-		# Set up the dictionary that will contain results for each token
-		results, token_to_type, token_to_set = make_class_auto()
-	
-	if which_task == 'RNNPred':
-		# Set up the dictionary that will contain results
-		results, token_to_type, token_to_set = make_pred()
+				results[measure].update({token:{}})
 
+				for epoch in epochs_snapshot:
+					results[measure][token].update({epoch:{}})
+					results[measure][token][epoch].update({0:[]})
+			
+					if ablate == True: 		
+						for unit_ablated in range(1, n_hidden + 1):
+							results[measure][token][epoch].update({unit_ablated:[]})
+					
 	results['Whh'] = []
 	return results, token_to_type, token_to_set
-
-def print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test):
-	"""
-	Prints retrieval loss values for different sets (train/test/non-patterned).
-	
-	Args:
-		test_task (str): Name of the task.
-		losses (list): Loss values corresponding to each predicted token.
-		predicted_tokens (list): Tokens predicted by the model.
-		tokens_train (list): List of training tokens.
-		tokens_test (list): List of testing tokens.
-
-	Returns:
-		None
-	"""
-	tokens_train = [''.join(p) for p in tokens_train]
-	tokens_test = [''.join(p) for p in tokens_test]
-	tokens_all = np.append(tokens_train, tokens_test)
-
-	# # Define ANSI escape codes for colors
-	# GREEN = '\033[92m'
-	# BLUE = '\033[94m'
-	# RED = '\033[91m'
-	# RESET = '\033[0m'
-
-	# # Print predicted tokens with colors
-	# for token in predicted_tokens:
-	# 	if token in tokens_train:
-	# 		print(f"{GREEN}{token}{RESET}", end=' ')
-	# 	elif token in tokens_test:
-	# 		print(f"{BLUE}{token}{RESET}", end=' ')
-	# 	else:
-	# 		print(f"{RED}{token}{RESET}", end=' ')
-
-	meanval_train = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_train])
-	meanval_test = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] in tokens_test])
-	meanval_other = np.nanmean([losses[i] for i in range(len(losses)) if predicted_tokens[i] not in tokens_all])
-
-	print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f} Loss NonPatt {meanval_other:.2f}', end='   ')

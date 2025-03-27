@@ -134,11 +134,11 @@ def main(
 			test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 			results_list = []
 			for test_task in test_tasks:
-				results, token_to_type, token_to_set = make_results_dict(test_task, tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
+				results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot)
 				results_list.append(results)
 		else:
 			test_tasks = [task]
-			results, token_to_type, token_to_set = make_results_dict(test_tasks[0], tokens_train, tokens_test, labels_train, labels_test, ablate, epochs_snapshot)
+			results, token_to_type, token_to_set = make_results_dict( tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epochs_snapshot)
 			results_list = [results]
 
 		print('TRAINING NETWORK')
@@ -148,20 +148,14 @@ def main(
 				print('epoch', epoch, test_tasks)
 
 				for test_task, results in zip(test_tasks, results_list):
-					test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+					test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+					
+					meanval_train = np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
 
-					if test_task == 'RNNClass' or test_task == 'RNNAuto':
-						meanval_train = np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
-						meanval_test=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
-						print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end='   ')
+					meanval_test=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
+
+					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end='   ')
 			
-					elif test_task == 'RNNPred':
-						losses = results['Loss'][epoch][0]
-						predicted_tokens = results['Retrieval'][epoch][0]
-
-						print_retrieval_color(test_task, losses, predicted_tokens, tokens_train, tokens_test)
-					else:
-						raise ValueError(f"Invalid task: {test_task}")
 					print('\n')
 
 			train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
