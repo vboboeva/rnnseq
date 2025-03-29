@@ -224,7 +224,7 @@ class RNN (Net):
 		# exit()
 		# # end check
 
-	def __hidden_update (self, h, x):
+	def _hidden_update (self, h, x):
 		'''
 		A single iteration of the RNN function
 		h: hidden activity
@@ -295,10 +295,7 @@ class RNN (Net):
 			# zt = batch_size, n_hidden
 
 			# process input to feed into recurrent network
-			# zi = self.i2h (xt)
-			# zh = self.h2h (ht)
-			# z = self.phi (zh + zi)
-			z = self.__hidden_update(ht, xt)
+			z = self._hidden_update(ht, xt)
 			z = _masking(z)
 
 			hidden.append(z)
@@ -320,7 +317,7 @@ class RNN (Net):
 		'''
 		_h = h.clone().detach().requires_grad_(True)
 		_x = x.clone().detach().requires_grad_(False)
-		_f = lambda h: self.__hidden_update(h, _x)
+		_f = lambda h: self._hidden_update(h, _x)
 		_grad = torch.autograd.functional.jacobian(_f, _h)
 		return _grad
 
