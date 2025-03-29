@@ -149,6 +149,12 @@ def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_le
 			loss = loss_function(out[-1], y)   
 			predicted = torch.argmax(out[-1], dim=-1)
 			predicted = np.array([predicted])[0]
+			# jac = model.jacobian(ht[-1], X[-1])#.detach().cpu().numpy()
+			# singular_values = torch.linalg.svdvals(jac)
+			# print(jac)
+			# print("Singular values:", singular_values)
+			# print(torch.max(singular_values))
+			# exit()
 
 		elif task == 'RNNAuto':
 			ht_, latent, out = model.forward(X, mask=mask, delay=delay)
