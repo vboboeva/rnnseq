@@ -8,6 +8,7 @@ import string
 from functools import partial
 import itertools
 import pickle
+import random
 from functions import * 
 from train import train
 from train import test
@@ -237,7 +238,9 @@ if __name__ == "__main__":
 		split_id = int(params[row_index, split_id_col_index])
 
 		# Set seeds
+		random.seed(1990+split_id)
 		np.random.seed(1990+split_id)
+		torch.manual_seed(1990+split_id)
 
 		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
 
