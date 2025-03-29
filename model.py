@@ -336,6 +336,20 @@ class RNN (Net):
 
 		return y
 
+
+class CT_RNN (RNN):
+	def __init__ (self, *args, dt=0.01, tau=1, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.dt = dt
+		self.tau = tau
+		self._dt = self.dt / self.tau
+
+	def _hidden_update(self, h, x):
+		zi = self.i2h (x)
+		zh = self.h2h (h)
+		return (1. - self._dt)*h + self._dt * self.phi (zh + zi)
+
+
 class RNNEncoder(nn.Module):
 	def __init__(self, d_input, d_hidden, d_latent, num_layers):
 		super(RNNEncoder, self).__init__()
