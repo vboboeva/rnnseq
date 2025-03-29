@@ -313,6 +313,17 @@ class RNN (Net):
 
 		return hidden, output
 
+	def jacobian (self, h, x, mask=None): # remember to change when ablating
+		'''
+		Returns the Jacobian of the RNN, evaluated at the hidden activity `h`
+		and for instantaneous input `x`
+		'''
+		_h = h.clone().detach().requires_grad_(True)
+		_x = x.clone().detach().requires_grad_(False)
+		_f = lambda h: self.__hidden_update(h, _x)
+		_grad = torch.autograd.functional.jacobian(_f, _h)
+		return _grad
+
 	def get_activity(self, x):
 
 		with torch.no_grad():
