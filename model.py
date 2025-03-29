@@ -224,6 +224,16 @@ class RNN (Net):
 		# exit()
 		# # end check
 
+	def __hidden_update (self, h, x):
+		'''
+		A single iteration of the RNN function
+		h: hidden activity
+		x: input
+		'''
+		zi = self.i2h (x)
+		zh = self.h2h (h)
+		return self.phi (zh + zi)
+
 	def forward(self, x, mask=None, delay=0):
 		'''
 		x
@@ -285,13 +295,14 @@ class RNN (Net):
 			# zt = batch_size, n_hidden
 
 			# process input to feed into recurrent network
-			zi = self.i2h (xt)
-			zh = self.h2h (ht)
-			z = self.phi (zh + zi)
+			# zi = self.i2h (xt)
+			# zh = self.h2h (ht)
+			# z = self.phi (zh + zi)
+			z = self.__hidden_update(ht, xt)
 			z = _masking(z)
 
 			hidden.append(z)
-			ht = z 
+			ht = z
 
 		# print('before', np.shape(hidden))
 		hidden = torch.reshape(torch.stack(hidden), _shape)
