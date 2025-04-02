@@ -227,39 +227,62 @@ if __name__ == "__main__":
 		noise_level = 0.0 # probability of finding an error in a given train sequence
 	)
 
-	# parameters
-	alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
-	if main_kwargs['from_file'] == []:
-		transfer=False
-	else:
-		transfer=True
+	for sim_idx, (from_file, to_freeze) in enumerate(zip(
+			[ ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
+			[ ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
+		)):
+		
+		main_kwargs['from_file'] = from_file
+		main_kwargs['to_freeze'] = to_freeze
+		
+		print(sim_idx, main_kwargs['from_file'], main_kwargs['to_freeze'])
 
-	L_col_index = 0
-	n_types_col_index = 1
-	n_hidden_col_index = 2
-	split_id_col_index = 3
-	index = int(sys.argv[1]) - 1
+		# parameters
+		alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
+		if main_kwargs['from_file'] == []:
+			transfer=False
+		else:
+			transfer=True
 
-	# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
+		L_col_index = 0
+		n_types_col_index = 1
+		n_hidden_col_index = 2
+		split_id_col_index = 3
+		index = int(sys.argv[1]) - 1
 
-	size = 1
-	for i in range(size):
-		row_index = index * size + i
+		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
+		
+		size = 1
+		for i in range(size):
+			row_index = index * size + i
 
-		L = 2 #int(params[row_index, L_col_index])
-		n_types = 5 #int(params[row_index, n_types_col_index])
-		n_hidden = int(params[row_index, n_hidden_col_index])
-		split_id = int(params[row_index, split_id_col_index])
+			L = 2 #int(params[row_index, L_col_index])
+			n_types = 5 #int(params[row_index, n_types_col_index])
+			n_hidden = 160 #int(params[row_index, n_hidden_col_index])
+			split_id = 0 #int(params[row_index, split_id_col_index])
 
-		# Set seeds
-		random.seed(1990+split_id)
-		np.random.seed(1990+split_id)
-		torch.manual_seed(1990+split_id)
+			# Set seeds
+			random.seed(1990+split_id)
+			np.random.seed(1990+split_id)
+			torch.manual_seed(1990+split_id)
 
-		output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
+			output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s_%d' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id, sim_idx+1)
 
-		input_folder_name = 'TaskRNNPred_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs30_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s' % (n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id )
+			input_folder_name = 'TaskRNNPred_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs100_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s_0' % (n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id)
+			
+			os.makedirs(output_folder_name, exist_ok=True)
 
-		os.makedirs(output_folder_name, exist_ok=True)
+			main(L, n_types, n_hidden, split_id, **main_kwargs)
 
-		main(L, n_types, n_hidden, split_id, **main_kwargs)
+			# for c in range(0, 10):
+			# 	print(c)
+			# 	filename = f'model_state_classcomb{c}.pth'
+			# 	full_state_dict = torch.load(f'{input_folder_name}/{filename}')
+			# 	print(full_state_dict.keys())
+			# 	# Extract and rename only encoder-related keys
+			# 	renamed_encoder_state_dict = {
+			# 		k.replace("encoder.rnn.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.rnn.")
+			# 	}
+			# 	print(renamed_encoder_state_dict.keys())
+			# 	# Save the modified encoder weights
+			# 	torch.save(renamed_encoder_state_dict, f"{input_folder_name}/{filename}")
