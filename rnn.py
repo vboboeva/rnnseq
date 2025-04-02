@@ -142,7 +142,7 @@ def main(
 				results_list.append(results)
 		else:
 			test_tasks = [task]
-			results, token_to_type, token_to_set = make_results_dict( tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
+			results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
 			results_list = [results]
 
 		print('TRAINING NETWORK')
@@ -166,7 +166,18 @@ def main(
 	
 		print('SAVING RESULTS')
 		# Save the model state
-		torch.save(model.state_dict(), '%s/model_state_classcomb%d.pth' % (output_folder_name, t))
+		if task == 'RNNClass' or task == 'RNNPred':
+			torch.save(model.state_dict(), f"{output_folder_name}/model_state_classcomb{t}.pth")
+		else:
+			# Get the full state dictionary
+			full_state_dict = model.state_dict()
+
+			# Extract and rename only encoder-related keys
+			renamed_encoder_state_dict = {
+				k.replace("encoder.rnn.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.rnn.")
+			}
+			# Save the modified encoder weights
+			torch.save(renamed_encoder_state_dict, f"{output_folder_name}/model_state_classcomb{t}.pth")
 
 		for results, test_task in zip(results_list, test_tasks):
 			with open('%s/results_task%s_classcomb%d.pkl'% (output_folder_name, test_task, t), 'wb') as handle:
