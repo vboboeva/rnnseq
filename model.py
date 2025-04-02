@@ -209,15 +209,12 @@ class RNN (Net):
 		
 		for name, pars in self.named_parameters():
 			if name in self._from_file:
-				# print(pars)
-				# print(_pars_dict[name])
 				pars.data = _pars_dict[name]
 			elif init is not None:
 				if "weight" in name:
 					f_in = 1.*pars.data.size()[1]
 					std = init_f(f_in)
 					pars.data.normal_(0., std)
-
 		# # check
 		# for name, pars in self.named_parameters():
 		#     print(name, "\t", torch.max(pars - _pars_dict[name]))
@@ -339,11 +336,16 @@ class RNN (Net):
 
 		return y
 
+
 class RNNEncoder(nn.Module):
-	def __init__(self, d_input, d_hidden, d_latent, num_layers):
+	def __init__(self, d_input, d_hidden, num_layers, d_latent, nonlinearity, device, 
+			model_filename, from_file, to_freeze, init_weights, layer_type):
 		super(RNNEncoder, self).__init__()
+		
 		# RNN: d_input -> d_latent
-		self.rnn = RNN(d_input, d_hidden, num_layers, d_latent)
+		self.rnn = RNN(d_input, d_hidden, num_layers, d_latent, nonlinearity=nonlinearity, device=device, 
+			model_filename=model_filename, from_file=from_file,
+			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 
 	def forward(self, x, delay=0):
 		# x: (sequence_length, batch_size, d_input) 
@@ -355,11 +357,14 @@ class RNNEncoder(nn.Module):
 		return rnn_out, latent[-1]
 
 class RNNDecoder(nn.Module):
-	def __init__(self, d_latent, d_hidden, d_output, num_layers, sequence_length):
+	def __init__(self, d_latent, d_hidden, num_layers, d_input, nonlinearity, device, 
+			init_weights, layer_type, sequence_length):
 		super(RNNDecoder, self).__init__()
-		# RNN: d_latent -> d_output
+		# RNN: d_latent -> d_input
 
-		self.rnn = RNN(d_latent, d_hidden, num_layers, d_output) 
+		self.rnn = RNN(d_latent, d_hidden, num_layers, d_input, nonlinearity=nonlinearity, device=device, 
+			init_weights=init_weights, layer_type=layer_type)
+		
 		self.sequence_length = sequence_length
 
 	def forward(self, latent, delay=0):
@@ -380,7 +385,15 @@ class RNNDecoder(nn.Module):
 		return output
 
 class RNNAutoencoder(nn.Module):
-	def __init__(self, d_input, d_hidden, num_layers, d_latent, sequence_length, device="cpu"):
+	def __init__(self, d_input, d_hidden, num_layers, d_latent, sequence_length,
+						nonlinearity='relu',
+						device="cpu",
+						model_filename=None, # file with model parameters
+						to_freeze = [], # parameters to keep frozen; list with elements in ['i2h', 'h2h', 'h2o']
+						from_file = [], # parameters to set from file; list with elements in ['i2h', 'h2h', 'h2o']
+						init_weights=None,
+						layer_type=nn.Linear,
+				):
 		super(RNNAutoencoder, self).__init__()
 
 		self.d_input = d_input
@@ -390,8 +403,11 @@ class RNNAutoencoder(nn.Module):
 		self.sequence_length = sequence_length
 		self.device = device
 
-		self.encoder = RNNEncoder(d_input, d_hidden, d_latent, num_layers)
-		self.decoder = RNNDecoder(d_latent, d_hidden, d_input, num_layers, sequence_length)
+		self.encoder = RNNEncoder(d_input, d_hidden, num_layers, d_latent, nonlinearity, device, 
+			model_filename, from_file, to_freeze, init_weights, layer_type)
+		
+		self.decoder = RNNDecoder(d_latent, d_hidden, num_layers, d_input, nonlinearity, device, 
+			init_weights=init_weights, layer_type=layer_type, sequence_length=sequence_length)
 
 	@property
 	def h2h (self):
