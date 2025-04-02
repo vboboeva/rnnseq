@@ -111,7 +111,7 @@ def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_
 				
 				elif which_task == 'RNNAuto':
 					results['HiddenAct'][token][epoch][idx_ablate] = hidden[0].detach().cpu().numpy()
-					results['Latent'][token][epoch][idx_ablate] = hidden[1].detach().cpu().numpy()
+					results['LatentAct'][token][epoch][idx_ablate] = hidden[1].detach().cpu().numpy()
 
 def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
 	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
