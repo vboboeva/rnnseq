@@ -57,7 +57,7 @@ def main(
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-	types = np.array(loadtxt('input/types_L%d_m%d.txt'%(cue_size, m), dtype='str')).reshape(-1)
+	types = np.array(loadtxt(f"input/types_L{cue_size}_m{m}.txt", dtype="str")).reshape(-1)
 
 	# load all the tokens corresponding to that type
 	if len(types) < n_types:
@@ -78,7 +78,7 @@ def main(
 	else:
 		pass
 
-	with open('%s/classes.pkl'% (output_folder_name), 'wb') as handle:
+	with open(f"{output_folder_name}/classes.pkl", "wb") as handle:
 		pickle.dump(list(type_combinations), handle, protocol=pickle.HIGHEST_PROTOCOL)
 	
 	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
@@ -87,7 +87,7 @@ def main(
 
 		num_classes = len(types_chosen)
 		if from_file != []:
-			model_filename = '%s/model_state_classcomb%d.pth'%(input_folder_name, t) # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
+			model_filename = f'{input_folder_name}/model_state_classcomb{t}.pth' # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		else:
 			model_filename=None
 
@@ -180,13 +180,13 @@ def main(
 			torch.save(renamed_encoder_state_dict, f"{output_folder_name}/model_state_classcomb{t}.pth")
 
 		for results, test_task in zip(results_list, test_tasks):
-			with open('%s/results_task%s_classcomb%d.pkl'% (output_folder_name, test_task, t), 'wb') as handle:
+			with open(f"{output_folder_name}/results_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
 				pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-		with open('%s/token_to_set_classcomb%d.pkl'% (output_folder_name, t), 'wb') as handle:
+		with open(f"{output_folder_name}/token_to_set_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_set, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-		with open('%s/token_to_type_classcomb%d.pkl'% (output_folder_name, t), 'wb') as handle:
+		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 ##################################################
@@ -266,23 +266,37 @@ if __name__ == "__main__":
 			np.random.seed(1990+split_id)
 			torch.manual_seed(1990+split_id)
 
-			output_folder_name = 'Task%s_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs%d_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s_%d' % ( main_kwargs['task'], n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], main_kwargs['n_epochs'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id, sim_idx+1)
+			output_folder_name = (
+				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
+				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
+				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
+				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_ablate"
+			)
 
-			input_folder_name = 'TaskRNNPred_N%d_nlatent%d_L%d_m%d_alpha%d_nepochs100_ntypes%d_fractrain%.1f_obj%s_init%s_transfer%s_cuesize%d_delay%d_datasplit%s_0' % (n_hidden, main_kwargs['n_latent'], L, main_kwargs['m'], main_kwargs['alpha'], n_types, main_kwargs['frac_train'], main_kwargs['objective'], main_kwargs['init_weights'],  main_kwargs['transfer_func'], main_kwargs['cue_size'], main_kwargs['delay'], split_id)
+			input_folder_name = (
+				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
+				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
+				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
+				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
+			)
 			
 			os.makedirs(output_folder_name, exist_ok=True)
 
 			main(L, n_types, n_hidden, split_id, **main_kwargs)
 
-			# for c in range(0, 10):
-			# 	print(c)
-			# 	filename = f'model_state_classcomb{c}.pth'
-			# 	full_state_dict = torch.load(f'{input_folder_name}/{filename}')
-			# 	print(full_state_dict.keys())
-			# 	# Extract and rename only encoder-related keys
-			# 	renamed_encoder_state_dict = {
-			# 		k.replace("encoder.rnn.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.rnn.")
-			# 	}
-			# 	print(renamed_encoder_state_dict.keys())
-			# 	# Save the modified encoder weights
-			# 	torch.save(renamed_encoder_state_dict, f"{input_folder_name}/{filename}")
+		exit()
+
+# for c in range(0, 10):
+# 	print(c)
+# 	filename = f'model_state_classcomb{c}.pth'
+# 	full_state_dict = torch.load(f'{input_folder_name}/{filename}')
+# 	print(full_state_dict.keys())
+# 	# Extract and rename only encoder-related keys
+# 	renamed_encoder_state_dict = {
+# 		k.replace("encoder.rnn.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.rnn.")
+# 	}
+# 	print(renamed_encoder_state_dict.keys())
+# 	# Save the modified encoder weights
+# 	torch.save(renamed_encoder_state_dict, f"{input_folder_name}/{filename}")
