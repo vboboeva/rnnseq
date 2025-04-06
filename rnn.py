@@ -1,5 +1,6 @@
 import sys
 import os
+from os.path import join
 import numpy as np
 from numpy import loadtxt
 import torch.nn as nn
@@ -8,10 +9,11 @@ import string
 from functools import partial
 import itertools
 import pickle
+import json
 import random
 from functions import * 
 from train import train
-from train import test
+from train import test_save
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 
 ###########################################
@@ -26,7 +28,7 @@ def main(
 	m = 2,
 	task=None,
 	objective='CE',
-	# model_filename=None, 
+	model_filename=None, 
 	from_file = [], 
 	to_freeze = [], 
 	init_weights=None, 
@@ -40,7 +42,7 @@ def main(
 	snap_freq=2,
 	drop_connect = 0.,
 	weight_decay = 0.,
-	ablate=True,
+	ablate=False,
 	delay=0,
 	cue_size=1,
 	data_balance='class',
@@ -138,32 +140,33 @@ def main(
 			test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 			results_list = []
 			for test_task in test_tasks:
-				results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
+				results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots)
 				results_list.append(results)
 		else:
 			test_tasks = [task]
-			results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots)
+			results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots)
 			results_list = [results]
 
 		print('TRAINING NETWORK')
-		for epoch in range(n_epochs + 1):
+		for epoch in range(n_epochs):
 			
 			if epoch in epoch_snapshots:
 				print('epoch', epoch, test_tasks)
 
 				for test_task, results in zip(test_tasks, results_list):
-					test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size)
+
+					test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, epoch, cue_size, idx_ablate = [], class_ablate=None)
 					
-					meanval_train = np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+					meanval_train = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
 
-					meanval_test=np.mean([results['Loss'][k][epoch][0] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
+					meanval_test=np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
 
-					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end='   ')
+					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
 			
 					print('\n')
 
 			train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
-	
+
 		print('SAVING RESULTS')
 		# Save the model state
 		if task == 'RNNClass' or task == 'RNNPred':
@@ -188,6 +191,59 @@ def main(
 
 		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+		print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION')
+
+
+		# ablating model at end of training
+		if ablate:
+			 
+			# LOADING IT FROM FILE
+			# ablate_filename = f'{input_folder_name}/cluster_unit_dict_classcomb{t}.json' # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file			
+			# with open(ablate_filename, 'rb') as handle:
+			# 	ablate_dict = json.load(handle)
+
+			if task == 'RNNMulti':
+				test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
+				results_ablate_list = []
+				for test_task in test_tasks:
+					results_ablate = make_results_ablate_dict(tokens_train, tokens_test, labels_train, labels_test, types_chosen)
+					results_ablate_list.append(results_ablate)
+			else:
+				test_tasks = [task]
+				results_ablate = make_results_ablate_dict(tokens_train, tokens_test, labels_train, labels_test, types_chosen)
+				results_ablate_list = [results_ablate]
+
+			for test_task, results_ablate in zip(test_tasks, results_ablate_list):
+				# ablate cluster and test
+				ablate_dict = compute_feature_variance(token_to_type, types_chosen, results, task, n_hidden, epoch)
+				
+				for ablateclass in types_chosen:
+					print('ablating cluster', ablateclass)
+					idx_ablate = ablate_dict[ablateclass]
+					
+					test_save(results_ablate, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, epoch+1, cue_size, idx_ablate = idx_ablate, class_ablate = ablateclass)
+
+					meanval_ablate = np.mean([results_ablate['Loss'][k][ablateclass] for k in results_ablate['Loss'].keys() if token_to_type[k] == list(types_chosen).index(ablateclass)] )
+
+					meanval_notablate = np.mean([results_ablate['Loss'][k][ablateclass] for k in results_ablate['Loss'].keys() if token_to_type[k] != list(types_chosen).index(ablateclass)] )
+
+					print(f'{meanval_ablate:.2f} {meanval_notablate:.2f}', end = '   ')
+
+					print('\n')
+
+					# for testclass in types_chosen:
+					# 	print('testing cluster', testclass)
+
+						# meanval_train = np.mean([results_ablate['Loss'][k][ablateclass] for k in results_ablate['Loss'].keys() if token_to_type[k] == list(types_chosen).index(testclass) and token_to_set[k] == 'train'])
+
+						# meanval_test = np.mean([results_ablate['Loss'][k][ablateclass] for k in results_ablate['Loss'].keys() if token_to_type[k] == list(types_chosen).index(testclass) and token_to_set[k] == 'test'])
+
+						# print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
+
+				with open(f"{output_folder_name}/results_ablate_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
+					pickle.dump(results_ablate, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 ##################################################
 

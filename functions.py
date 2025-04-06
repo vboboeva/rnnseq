@@ -3,6 +3,8 @@ import torch
 import torch.nn.functional as F
 import string
 import itertools
+from sklearn.cluster import KMeans
+
 # from find_flat_distribution_subset import *
 
 # from pulp import LpProblem, LpVariable, lpSum, LpBinary, LpStatus
@@ -333,7 +335,7 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
-def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hidden, ablate, epoch_snapshots):
+def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots):
 
 	results = {}
 	token_to_type = {}
@@ -354,11 +356,160 @@ def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, n_hi
 
 				for epoch in epoch_snapshots:
 					results[measure][token].update({epoch:{}})
-					results[measure][token][epoch].update({0:[]})
-			
-					if ablate == True: 		
-						for unit_ablated in range(1, n_hidden + 1):
-							results[measure][token][epoch].update({unit_ablated:[]})
 					
 	results['Whh'] = []
 	return results, token_to_type, token_to_set
+
+
+def make_results_ablate_dict(tokens_train, tokens_test, labels_train, labels_test, classes_chosen):
+
+	results = {}
+
+	for measure in ['Loss', 'Retrieval', 'HiddenAct', 'LatentAct']:
+		results.update({measure:{}}) 
+
+		for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+
+			tokens = [''.join(token) for token in tokens]
+		
+			for token, label in (zip(tokens, labels)):
+
+				results[measure].update({token:{}})
+
+				for seqclass in classes_chosen:
+					results[measure][token].update({seqclass:{}})
+					
+	results['Whh'] = []
+	return results
+
+def find_optimal_n(n_clusters, mat_no_zeros):
+	scores = list()
+	labels_list = list()
+	for n_cluster in n_clusters:
+		# clustering = AgglomerativeClustering(n_cluster, affinity='cosine', linkage='average')
+		clustering = KMeans(n_cluster, algorithm='lloyd', n_init=20, random_state=0)
+		clustering.fit(mat_no_zeros) # n_samples, n_features = n_units, n_rules/n_epochs
+		labels = clustering.labels_ # cluster labels
+
+		score = metrics.silhouette_score(mat_no_zeros, labels)
+
+		scores.append(score)
+		labels_list.append(labels)
+
+	scores = np.array(scores)
+
+	return scores, labels_list
+
+def seqclass(task, results, pos_idx, all_seqs, token_to_type, N, classcomb, epoch_):
+	mat_class = np.zeros((N, len(classcomb)))
+	
+	for neuron_idx in range(N):
+
+		# first look at classes as features
+		max_types = 0
+		for class_idx in range(len(classcomb)):
+			# find all sequences having that feature
+			all_seqs_types = np.array([token_to_type[seq] for seq in all_seqs])
+			indices = np.where(all_seqs_types == class_idx)[0]
+			some_seqs = [all_seqs[i] for i in indices]
+			S = []
+			for seq in some_seqs:
+				activity = 0.
+				if task == 'RNNClass':
+					retr_class = np.array(list(results['Retrieval'][seq][epoch_]))
+					if retr_class == class_idx:
+						activity = np.array(list(results['HiddenAct'][seq][epoch_]))[pos_idx, neuron_idx]
+				
+				elif task == 'RNNAuto':
+						activity = np.array(list(results['HiddenAct'][seq][epoch_]))[pos_idx, neuron_idx]
+
+				elif task == 'RNNPred':
+					seq_retr = results['Retrieval'][seq][epoch_]
+					if seq_retr in token_to_type.keys():
+						class_retr = token_to_type[seq_retr]
+						if class_retr == class_idx:
+							activity = np.array(list(results['HiddenAct'][seq][epoch_]))[pos_idx, neuron_idx]
+				
+				if activity > 0.:
+					S += [activity]  # for class feature, take only hidden activities at the last timestep
+
+			if S != []:
+				mat_class[neuron_idx, class_idx] = np.nanvar(S)
+
+				if np.nanvar(S) > max_types:
+					max_types = np.nanvar(S)
+
+		for idx in range(len(classcomb)):
+			if max_types != 0.:
+				mat_class[neuron_idx, idx] /= max_types
+
+	return mat_class
+
+
+def compute_feature_variance(token_to_type, classcomb, results, task, n_hidden, epoch_):
+	set_ncluster = 'feature'
+	
+	all_seqs = np.array(list(token_to_type.keys())) # results['HiddenAct'] is L by N for the other networks and size n_latent for RNNAuto
+
+	mat = seqclass(task, results, -1, all_seqs, token_to_type, n_hidden, classcomb, epoch_)
+	
+	feature_labels = [_type for _type in classcomb]
+	# mat is a matrix of dimensions N by num_features
+	mask = mat.sum(axis=1) > 1e-3 # get indices of active neurons: those whose cumulative activity across all features is more than 1e-3
+	track_neuron_indices = np.arange(n_hidden)
+	relabel_map = -np.ones_like(track_neuron_indices).astype(int)
+	
+	# save inactive units at the end of the list
+	relabel_map[mask.sum():] = track_neuron_indices[~mask]
+
+	mat_no_zeros = mat[mask, :]
+	
+	# using clustering algorithm to find the optimal number of clusters
+	if set_ncluster == 'silhouette':
+		n_clusters=np.arange(2, n_hidden-1) 
+		scores, labels_list = find_optimal_n(n_clusters, mat_no_zeros)
+		i = np.argmax(scores)
+		n_cluster = n_clusters[i]
+		labels = labels_list[i]
+		print('n_cluster', n_cluster)
+
+	# enforcing the number of clusters to be equal to number of neurons 
+	elif set_ncluster == 'feature':
+		n_cluster = len(classcomb)
+		print('n_cluster', n_cluster)
+		clustering = KMeans(n_cluster, algorithm='lloyd', n_init=100, random_state=0)
+		clustering.fit(mat_no_zeros) # n_samples, n_features = n_units, n_rules/n_epochs
+		labels = clustering.labels_
+		
+	else:
+		print('set_ncluster parameter not recognized!!!! Please select another option')
+
+	# sort clusters by feature preference: computes, for each unique feature, the feature index that has the highest summed activation across all hidden units assigned to that feature.
+
+	label_cluster_mat = np.array( [np.mean(mat_no_zeros[labels==l], axis=0) for l in set(labels)] ).T
+
+	label_prefs = []
+	_clusters = list(set(labels))
+	# loop over features (equal to num clusters)
+	for row in label_cluster_mat:
+		# pick the cluster where the feature is maximal
+		# but hasn't been selected yet
+		for m in np.argsort(row)[::-1]:
+			if m in _clusters:
+				label_prefs.append(m)
+				break
+		_clusters.remove(m)
+	
+	label_cluster_mat = label_cluster_mat[:, np.array(label_prefs)]
+
+	# save the unit-cluster mapping into dictionary
+	cluster_unit_dict = {**{'-1': np.where(~mask)[0].tolist()},
+						**{f'{(classcomb)[n]}': np.where(labels==lp)[0].tolist() for n, lp in enumerate(label_prefs)}
+						}
+	
+	# print(cluster_unit_dict)
+	# filepath = join(par.folder, folder_name, f'cluster_unit_dict_classcomb{c}.json')
+	# with open(filepath, 'w') as f:
+	# 	json.dump(cluster_unit_dict, f)
+
+	return cluster_unit_dict

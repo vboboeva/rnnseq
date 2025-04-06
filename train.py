@@ -87,37 +87,31 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 # 				test network 			 #
 ##########################################
 
-def test(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, ablate, delay, epoch, cue_size):
-
+def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, epoch, cue_size, idx_ablate = [], class_ablate=None):
 	for (X, y, tokens) in zip([X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 		X = X.permute((1,0,2))
 
-		if ablate == False:
-			range_ablate = 1
-		else:
-			range_ablate = n_hidden + 1
+		for (_X, _y, token) in zip(X, y, tokens):
+			token = ''.join(token)
 
-		for idx_ablate in range(range_ablate):
-			for (_X, _y, token) in zip(X, y, tokens):
-				token = ''.join(token)
+			Z, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, n_hidden=n_hidden, delay=delay, cue_size=cue_size, idx_ablate = idx_ablate)
 
-				Z, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, idx_ablate=idx_ablate, n_hidden=n_hidden, delay=delay, cue_size=cue_size)
+			if idx_ablate == []:
+				whichkey = epoch
+			else:
+				whichkey = class_ablate
 
-				results['Loss'][token][epoch][idx_ablate] = loss
-				results['Retrieval'][token][epoch][idx_ablate] = Z
+			results['Loss'][token][whichkey] = loss
+			results['Retrieval'][token][whichkey] = Z
 
-				if which_task == 'RNNClass' or which_task == 'RNNPred':
-					results['HiddenAct'][token][epoch][idx_ablate] = hidden.detach().cpu().numpy()
-				
-				elif which_task == 'RNNAuto':
-					results['HiddenAct'][token][epoch][idx_ablate] = hidden[0].detach().cpu().numpy()
-					results['LatentAct'][token][epoch][idx_ablate] = hidden[1].detach().cpu().numpy()
+			if which_task == 'RNNClass' or which_task == 'RNNPred':
+				results['HiddenAct'][token][whichkey] = hidden.detach().cpu().numpy()
+			
+			elif which_task == 'RNNAuto':
+				results['HiddenAct'][token][whichkey] = hidden[0].detach().cpu().numpy()
+				results['LatentAct'][token][whichkey] = hidden[1].detach().cpu().numpy()
 
-def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden=10,
-	idx_ablate=-1, # index of the hidden unit to ablate. -1 = no ablation
-	delay=0,
-	cue_size=1
-	):
+def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden, delay=0, cue_size=1, idx_ablate = []):
 	if hasattr(model, 'set_task'):
 		model.set_task(task)
 	
@@ -130,8 +124,10 @@ def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_le
 		X = X.to(model.device)
 
 		mask = torch.ones(n_hidden)
-		if idx_ablate != 0:
-			mask[idx_ablate-1] = 0
+		if idx_ablate == []:
+			pass
+		else:
+			mask[idx_ablate] = 0
 		
 		if task == 'RNNPred':
 			ht, out = model.forward(X, mask=mask)
