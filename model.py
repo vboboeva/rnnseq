@@ -238,10 +238,13 @@ class RNN (Net):
 		seq_length, batch_size, d_input
 		or
 		seq_length, d_input
-		'''
 
-		# print("x.shape (input) ", x.shape)
-		# print("mask.shape ", mask.shape)
+		mask: torch.Tensor of bools
+			True for active neurons, False for ablated neurons
+		
+		delay: int
+			Number of time steps to allow after the input
+		'''
 
 		if mask is not None:
 			assert isinstance(mask, torch.Tensor) and mask.shape == (self.d_hidden,), \
@@ -321,20 +324,20 @@ class RNN (Net):
 		_grad = torch.autograd.functional.jacobian(_f, _h)
 		return _grad
 
-	def get_activity(self, x):
+	# def get_activity(self, x):
 
-		with torch.no_grad():
+	# 	with torch.no_grad():
 
-			_x = x.clone().detach().to(self.device)
+	# 		_x = x.clone().detach().to(self.device)
 
-			ht, hT, _  = self.forward(_x)
+	# 		ht, hT, _  = self.forward(_x)
 
-			# print('ht', np.shape(ht)) # activity for whole sequence
-			# print('hT', np.shape(hT)) # activity for last element of sequence
+	# 		# print('ht', np.shape(ht)) # activity for whole sequence
+	# 		# print('hT', np.shape(hT)) # activity for last element of sequence
 
-			y = ht.permute(1,0,2) # y is of size num_tokens (train/test) x L x N 
+	# 		y = ht.permute(1,0,2) # y is of size num_tokens (train/test) x L x N 
 
-		return y
+	# 	return y
 
 
 class RNNEncoder(nn.Module):
