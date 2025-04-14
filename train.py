@@ -87,14 +87,14 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 # 				test network 			 #
 ##########################################
 
-def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, epoch, cue_size, idx_ablate = [], class_ablate=None):
+def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, cue_size, epoch=None, idx_ablate = [], class_ablate=None):
 	for (X, y, tokens) in zip([X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 		X = X.permute((1,0,2))
 
 		for (_X, _y, token) in zip(X, y, tokens):
 			token = ''.join(token)
 
-			Z, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, n_hidden=n_hidden, delay=delay, cue_size=cue_size, idx_ablate = idx_ablate)
+			output, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, n_hidden=n_hidden, delay=delay, cue_size=cue_size, idx_ablate = idx_ablate)
 
 			if idx_ablate == []:
 				whichkey = epoch
@@ -102,7 +102,7 @@ def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, to
 				whichkey = class_ablate
 
 			results['Loss'][token][whichkey] = loss
-			results['Retrieval'][token][whichkey] = Z
+			results['Retrieval'][token][whichkey] = output
 
 			if which_task == 'RNNClass' or which_task == 'RNNPred':
 				results['HiddenAct'][token][whichkey] = hidden.detach().cpu().numpy()
@@ -110,6 +110,7 @@ def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, to
 			elif which_task == 'RNNAuto':
 				results['HiddenAct'][token][whichkey] = hidden[0].detach().cpu().numpy()
 				results['LatentAct'][token][whichkey] = hidden[1].detach().cpu().numpy()
+
 
 def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden, delay=0, cue_size=1, idx_ablate = []):
 	if hasattr(model, 'set_task'):

@@ -15,6 +15,7 @@ from functions import *
 from train import train
 from train import test_save
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
+from pprint import pprint
 
 ###########################################
 ################## M A I N ################
@@ -74,9 +75,9 @@ def main(
 			type_combinations = list(itertools.combinations(types, n_types))
 
 	# if the number of possible combinations is too large, we just consider the first 100
-	if len(type_combinations) > 10:
+	if len(type_combinations) > 100:
 		np.random.shuffle(type_combinations)
-		type_combinations = type_combinations[:10]
+		type_combinations = type_combinations[:100]
 	else:
 		pass
 
@@ -101,7 +102,7 @@ def main(
 		n_batches = len(tokens_train) // batch_size
 
 		# n_epochs for which take a snapshot of neural activity
-		epoch_snapshots = np.arange(0, int(n_epochs)+1, snap_freq)
+		epoch_snapshots = np.arange(0, int(n_epochs), snap_freq)
 
 		if drop_connect != 0.:
 			layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
@@ -155,7 +156,7 @@ def main(
 
 				for test_task, results in zip(test_tasks, results_list):
 
-					test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, epoch, cue_size, idx_ablate = [], class_ablate=None)
+					test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, epoch=epoch)
 					
 					meanval_train = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
 
@@ -198,11 +199,6 @@ def main(
 		# ablating model at end of training
 		if ablate:
 			 
-			# LOADING IT FROM FILE
-			# ablate_filename = f'{input_folder_name}/cluster_unit_dict_classcomb{t}.json' # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file			
-			# with open(ablate_filename, 'rb') as handle:
-			# 	ablate_dict = json.load(handle)
-
 			if task == 'RNNMulti':
 				test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 				results_ablate_list = []
@@ -213,16 +209,18 @@ def main(
 				test_tasks = [task]
 				results_ablate = make_results_ablate_dict(tokens_train, tokens_test, labels_train, labels_test, types_chosen)
 				results_ablate_list = [results_ablate]
+				# print('results_ablate')
+				# pprint(results_ablate)
 
 			for test_task, results_ablate in zip(test_tasks, results_ablate_list):
 				# ablate cluster and test
-				ablate_dict = compute_feature_variance(token_to_type, types_chosen, results, task, n_hidden, epoch)
-				
+				ablate_dict = compute_feature_variance(token_to_type, types_chosen, results, task, n_hidden, epoch_snapshots[-1])
+
 				for ablateclass in types_chosen:
 					print('ablating cluster', ablateclass)
 					idx_ablate = ablate_dict[ablateclass]
 					
-					test_save(results_ablate, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, epoch+1, cue_size, idx_ablate = idx_ablate, class_ablate = ablateclass)
+					test_save(results_ablate, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, idx_ablate = idx_ablate, class_ablate = ablateclass)
 
 					meanval_ablate = np.mean([results_ablate['Loss'][k][ablateclass] for k in results_ablate['Loss'].keys() if token_to_type[k] == list(types_chosen).index(ablateclass)] )
 
@@ -250,14 +248,14 @@ def main(
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	params = loadtxt("params_new.txt")
+	# params = loadtxt("params_new.txt")
 
 	main_kwargs = dict(
 		# network parameters
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
+		task = 'RNNAuto',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
@@ -269,11 +267,11 @@ if __name__ == "__main__":
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		alpha = 15, # size of alphabet
+		alpha = 5, # size of alphabet
 		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
-		ablate = False, # whether to test net with ablated units
+		ablate = True, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
 		cue_size = 4, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class', # choose btw 'class' and 'whatwhere'
@@ -284,8 +282,8 @@ if __name__ == "__main__":
 	)
 
 	for sim_idx, (from_file, to_freeze) in enumerate(zip(
-			[ ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
-			[ ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
+			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
+			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
 		)):
 		
 		main_kwargs['from_file'] = from_file
@@ -327,12 +325,12 @@ if __name__ == "__main__":
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_ablate"
+				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}"
 			)
 
 			input_folder_name = (
 				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
-				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
+				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
 				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
