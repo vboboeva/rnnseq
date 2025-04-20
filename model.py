@@ -132,6 +132,8 @@ class RNN (Net):
 
 		#     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
+		self.init_weights (init)
+
 		self.i2h = layer_type(d_input, d_hidden, bias=0)
 		if 'i2h' in to_freeze:
 			freeze(self.i2h)
@@ -176,8 +178,6 @@ class RNN (Net):
 		elif drop_l == "all":
 			drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
 		drop_l = drop_l.split(",")
-
-		self.init_weights (init)
 
 	def init_weights(self, init, seed=None):
 		
