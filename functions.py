@@ -328,8 +328,15 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
 	X_train, y_train = seq_to_vectors(tokens_train, labels_train, alpha, letter_to_index, len(types), noise_level)
-	tokens_test, labels_test = letter_to_seq(types, test_letters)
-	X_test, y_test = seq_to_vectors(tokens_test, labels_test, alpha, letter_to_index, len(types), noise_level=0.0)
+	
+	if frac_train == 1:
+		tokens_test = []
+		labels_test = []
+		X_test = []
+		y_test = []
+	else:
+		tokens_test, labels_test = letter_to_seq(types, test_letters)
+		X_test, y_test = seq_to_vectors(tokens_test, labels_test, alpha, letter_to_index, len(types), noise_level=0.0)
 
 	print('number of training tokens', len(tokens_train))
 	print('number of testing tokens', len(tokens_test))
