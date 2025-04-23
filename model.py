@@ -103,10 +103,12 @@ class RNN (Net):
 			bias=True,
 			device="cpu",
 			train_i2h = True,
+			sim_id = None,
 		):
 
 		super(RNN, self).__init__()
 		init=init_weights
+		print('sim_id', sim_id)
 		self._from_file = []
 		self._model_filename=model_filename
 
@@ -116,23 +118,7 @@ class RNN (Net):
 		self.d_output = d_output
 		self.d_hidden = d_hidden
 
-		# if train_i2h:
-		#     self.i2h = nn.Linear (d_input, d_hidden, bias=bias)
-
-		# else:
-		#     # MANUALLY DEFINE INPUT WEIGHTS HERE
-		#     self._input_weights = torch.cat([torch.eye(self.d_input), torch.zeros(self.d_hidden - self.d_input, self.d_input)]) 
-
-		#     # _n_repeats = self.d_hidden // self.d_input
-		#     # assert self.d_hidden % self.d_input == 0, \
-		#     #     "Hidden layer size should be integer multiple of input size"
-		#     # self._input_weights = torch.repeat_interleave(_input_weights, _n_repeats, dim=0)
-			
-		#     self._input_weights.requires_grad = False
-
-		#     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
-
-		self.init_weights (init)
+		self.initialize_weights(init, seed=sim_id)
 
 		self.i2h = layer_type(d_input, d_hidden, bias=0)
 		if 'i2h' in to_freeze:
@@ -179,7 +165,8 @@ class RNN (Net):
 			drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
 		drop_l = drop_l.split(",")
 
-	def init_weights(self, init, seed=None):
+	def initialize_weights(self, init, seed=None):
+		print('init', init)
 		
 		_pars_dict = {}
 		if self._model_filename is not None:
@@ -189,9 +176,9 @@ class RNN (Net):
 			_pars_dict = torch.load(self._model_filename)
 
 		if seed is not None:
-			torch.manual_seed(seed)
+			torch.manual_seed(1990+seed)
 
-		if init is None:
+		if init == None:
 			pass
 		elif init == "Rich":
 			# initialisation of the weights -- N(0, 1/n)
