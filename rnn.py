@@ -74,10 +74,10 @@ def main(
 			# Get all ntype-element combinations
 			type_combinations = list(itertools.combinations(types, n_types))
 
-	# if the number of possible combinations is too large, we just consider the first 100
-	if len(type_combinations) > 100:
+	# if the number of possible combinations is too large, we just consider the first 20
+	if len(type_combinations) > 20:
 		np.random.shuffle(type_combinations)
-		type_combinations = type_combinations[:100]
+		type_combinations = type_combinations[:20]
 	else:
 		pass
 
@@ -255,23 +255,23 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNAuto',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
+		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		init_weights = None, # choose btw None, 'const', 'lazy', 'rich' , weight initialization
+		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 100, # number of training epochs
+		n_epochs = 20, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		alpha = 5, # size of alphabet
-		snap_freq = 5, # snapshot of net activity every snap_freq epochs
+		alpha = 15, # size of alphabet
+		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
-		ablate = True, # whether to test net with ablated units
+		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
 		cue_size = 4, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class', # choose btw 'class' and 'whatwhere'
@@ -310,8 +310,8 @@ if __name__ == "__main__":
 		for i in range(size):
 			row_index = index * size + i
 
-			L = 2 #int(params[row_index, L_col_index])
-			n_types = 5 #int(params[row_index, n_types_col_index])
+			L = 0 #int(params[row_index, L_col_index])
+			n_types = 7 #int(params[row_index, n_types_col_index])
 			n_hidden = 160 #int(params[row_index, n_hidden_col_index])
 			split_id = 0 #int(params[row_index, split_id_col_index])
 
@@ -339,8 +339,6 @@ if __name__ == "__main__":
 			os.makedirs(output_folder_name, exist_ok=True)
 
 			main(L, n_types, n_hidden, split_id, **main_kwargs)
-
-		exit()
 
 # for c in range(0, 10):
 # 	print(c)
