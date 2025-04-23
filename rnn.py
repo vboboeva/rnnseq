@@ -22,7 +22,7 @@ from pprint import pprint
 ###########################################
 
 def main(
-	L, n_types, n_hidden, split_id,
+	L, n_types, n_hidden, split_id, sim_id,
 	# network parameters
 	n_layers=1,
 	n_latent=7,
@@ -86,9 +86,10 @@ def main(
 	
 	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
 
-	for t, types_chosen in enumerate(list(type_combinations)):
-		
-		if input_folder_name is not None:
+	for t, types_chosen in enumerate(list(type_combinations)[:1]):
+
+		num_classes = len(types_chosen)
+		if from_file != []:
 			model_filename = f'{input_folder_name}/model_state_classcomb{t}.pth' # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 	
 		num_classes = len(types_chosen)
@@ -117,7 +118,7 @@ def main(
 			model = RNN(alpha, n_hidden, n_layers, output_size, 
 			nonlinearity=transfer_func, device=device, 
 			model_filename=model_filename, from_file=from_file,
-			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type, sim_id=sim_id)
 		
 		elif task == 'RNNAuto':
 			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L+cue_size,
@@ -170,7 +171,7 @@ def main(
 		print('SAVING RESULTS')
 		# Save the model state
 		if task == 'RNNClass' or task == 'RNNPred':
-			torch.save(model.state_dict(), f"{output_folder_name}/model_state_classcomb{t}.pth")
+			torch.save(model.state_dict(), f"{output_folder_name}/model_state_classcomb{t}_sim{sim_id}.pth")
 		else:
 			# Get the full state dictionary
 			full_state_dict = model.state_dict()
@@ -183,7 +184,7 @@ def main(
 			torch.save(renamed_encoder_state_dict, f"{output_folder_name}/model_state_classcomb{t}.pth")
 
 		for results, test_task in zip(results_list, test_tasks):
-			with open(f"{output_folder_name}/results_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
+			with open(f"{output_folder_name}/results_task{test_task}_classcomb{t}_sim{sim_id}.pkl", 'wb') as handle:
 				pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 		with open(f"{output_folder_name}/token_to_set_classcomb{t}.pkl", 'wb') as handle:
@@ -192,11 +193,10 @@ def main(
 		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-		print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION')
-
 
 		# ablating model at end of training
 		if ablate:
+			print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION')
 			 
 			if task == 'RNNMulti':
 				test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
@@ -238,8 +238,8 @@ def main(
 
 						# print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
 
-				with open(f"{output_folder_name}/results_ablate_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
-					pickle.dump(results_ablate, handle, protocol=pickle.HIGHEST_PROTOCOL)
+				# with open(f"{output_folder_name}/results_ablate_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
+				# 	pickle.dump(results_ablate, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 ##################################################
@@ -247,7 +247,7 @@ def main(
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	params = loadtxt("parameters_phase_N_L.txt")
+	params = loadtxt("parameters.txt")
 
 	main_kwargs = dict(
 		# network parameters
@@ -262,7 +262,7 @@ if __name__ == "__main__":
 		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 41, # number of training epochs
+		n_epochs = 21, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
@@ -293,11 +293,12 @@ if __name__ == "__main__":
 		n_types_col_index = 1
 		n_hidden_col_index = 2
 		split_id_col_index = 3
+		sim_id_col_index = 4
 		index = int(sys.argv[1]) - 1
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 6
+		size = 5
 		for i in range(size):
 			row_index = index * size + i
 		# for split_id in range(40):
@@ -306,11 +307,11 @@ if __name__ == "__main__":
 			n_types = int(params[row_index, n_types_col_index])
 			n_hidden = int(params[row_index, n_hidden_col_index])
 			split_id = int(params[row_index, split_id_col_index])
+			sim_id = int(params[row_index, sim_id_col_index])
 
 			# Set seeds
 			random.seed(1990+split_id)
 			np.random.seed(1990+split_id)
-			torch.manual_seed(1990+split_id)
 
 			output_folder_name = (
 				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
@@ -341,9 +342,8 @@ if __name__ == "__main__":
 			
 			os.makedirs(output_folder_name, exist_ok=True)
 
-			main(L, n_types, n_hidden, split_id, **main_kwargs)
-		
-		# exit()
+			main(L, n_types, n_hidden, split_id, sim_id, **main_kwargs)
+
 
 # for c in range(0, 10):
 # 	print(c)
