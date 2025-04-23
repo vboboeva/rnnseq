@@ -161,7 +161,6 @@ def generate_random_strings(m, n, length):
 		m (int): Number of unique letters.
 		n (int): Number of strings to generate.
 		length (int): Length of each string.
-		sim_datasplit (int): Random seed for reproducibility.
 
 	Returns:
 		list: List of randomly generated strings.
