@@ -298,22 +298,23 @@ if __name__ == "__main__":
 		else:
 			transfer=True
 
-		L_col_index = 0
-		n_types_col_index = 1
-		n_hidden_col_index = 2
-		split_id_col_index = 3
-		index = int(sys.argv[1]) - 1
+		# L_col_index = 0
+		# n_types_col_index = 1
+		# n_hidden_col_index = 2
+		# split_id_col_index = 3
+		# index = int(sys.argv[1]) - 1
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 1
-		for i in range(size):
-			row_index = index * size + i
+		# size = 1
+		# for i in range(size):
+			# row_index = index * size + i
+		for split_id in range(40):
 
 			L = 0 #int(params[row_index, L_col_index])
 			n_types = 7 #int(params[row_index, n_types_col_index])
 			n_hidden = 160 #int(params[row_index, n_hidden_col_index])
-			split_id = 0 #int(params[row_index, split_id_col_index])
+			# split_id = 0 #int(params[row_index, split_id_col_index])
 
 			# Set seeds
 			random.seed(1990+split_id)
@@ -339,6 +340,8 @@ if __name__ == "__main__":
 			os.makedirs(output_folder_name, exist_ok=True)
 
 			main(L, n_types, n_hidden, split_id, **main_kwargs)
+		
+		exit()
 
 # for c in range(0, 10):
 # 	print(c)
