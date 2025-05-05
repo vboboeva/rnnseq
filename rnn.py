@@ -248,7 +248,7 @@ def main(
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	# params = loadtxt("params_new.txt")
+	params = loadtxt("parameters_phase_N_L.txt")
 
 	main_kwargs = dict(
 		# network parameters
@@ -263,12 +263,12 @@ if __name__ == "__main__":
 		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 20, # number of training epochs
+		n_epochs = 41, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		alpha = 15, # size of alphabet
-		snap_freq = 1, # snapshot of net activity every snap_freq epochs
+		alpha = 10, # size of alphabet
+		snap_freq = 10, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
@@ -282,8 +282,8 @@ if __name__ == "__main__":
 	)
 
 	for sim_idx, (from_file, to_freeze) in enumerate(zip(
-			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
-			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
+			[[]], #, ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
+			[[]] #, ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
 		)):
 		
 		main_kwargs['from_file'] = from_file
@@ -298,23 +298,23 @@ if __name__ == "__main__":
 		else:
 			transfer=True
 
-		# L_col_index = 0
-		# n_types_col_index = 1
-		# n_hidden_col_index = 2
-		# split_id_col_index = 3
-		# index = int(sys.argv[1]) - 1
+		L_col_index = 0
+		n_types_col_index = 1
+		n_hidden_col_index = 2
+		split_id_col_index = 3
+		index = int(sys.argv[1]) - 1
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		# size = 1
-		# for i in range(size):
-			# row_index = index * size + i
-		for split_id in range(40):
+		size = 6
+		for i in range(size):
+			row_index = index * size + i
+		# for split_id in range(40):
 
-			L = 0 #int(params[row_index, L_col_index])
-			n_types = 7 #int(params[row_index, n_types_col_index])
-			n_hidden = 160 #int(params[row_index, n_hidden_col_index])
-			# split_id = 0 #int(params[row_index, split_id_col_index])
+			L = int(params[row_index, L_col_index])
+			n_types = int(params[row_index, n_types_col_index])
+			n_hidden = int(params[row_index, n_hidden_col_index])
+			split_id = int(params[row_index, split_id_col_index])
 
 			# Set seeds
 			random.seed(1990+split_id)
@@ -329,19 +329,19 @@ if __name__ == "__main__":
 				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}"
 			)
 
-			input_folder_name = (
-				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
-				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
-				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
-				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
-			)
+			# input_folder_name = (
+			# 	f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+			# 	f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
+			# 	f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
+			# 	f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
+			# 	f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
+			# )
 			
 			os.makedirs(output_folder_name, exist_ok=True)
 
 			main(L, n_types, n_hidden, split_id, **main_kwargs)
 		
-		exit()
+		# exit()
 
 # for c in range(0, 10):
 # 	print(c)
