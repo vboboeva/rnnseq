@@ -29,7 +29,6 @@ class LinearWeightDropout(nn.Linear):
 			return output
 		return output + self.bias
 
-
 class Net(nn.Module):
 	'''
 	Base class for network models.
@@ -132,8 +131,6 @@ class RNN (Net):
 
 		#     self.i2h = lambda x: torch.matmul( x, self._input_weights.T )
 
-		self.init_weights (init)
-
 		self.i2h = layer_type(d_input, d_hidden, bias=0)
 		if 'i2h' in to_freeze:
 			freeze(self.i2h)
@@ -179,8 +176,10 @@ class RNN (Net):
 			drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
 		drop_l = drop_l.split(",")
 
+		self.init_weights (init)
+
 	def init_weights(self, init, seed=None):
-		
+
 		_pars_dict = {}
 		if self._model_filename is not None:
 			# The parameters to be set from file are removed from the list of
@@ -206,7 +205,6 @@ class RNN (Net):
 			raise ValueError(
 				f"Invalid init option '{init}'\n" + \
 				 "Choose either None, 'Rich', 'Lazy' or 'Const'")
-		
 		for name, pars in self.named_parameters():
 			if name in self._from_file:
 				pars.data = _pars_dict[name]
@@ -218,7 +216,6 @@ class RNN (Net):
 		# # check
 		# for name, pars in self.named_parameters():
 		#     print(name, "\t", torch.max(pars - _pars_dict[name]))
-		# exit()
 		# # end check
 
 	def __hidden_update (self, h, x):
