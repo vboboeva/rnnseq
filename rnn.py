@@ -16,6 +16,7 @@ from train import train
 from train import test_save
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 from pprint import pprint
+import matplotlib.pyplot as plt
 
 ###########################################
 ################## M A I N ################
@@ -32,7 +33,7 @@ def main(
 	model_filename=None, 
 	from_file = [], 
 	to_freeze = [], 
-	init_weights=None, 
+	init_weights='Rich', 
 	learning_rate = 0.001,
 	transfer_func='relu',
 	n_epochs=10,
@@ -193,11 +194,11 @@ def main(
 		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-		print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION')
 
 
 		# ablating model at end of training
 		if ablate:
+			print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION')
 			 
 			if task == 'RNNMulti':
 				test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
@@ -242,13 +243,26 @@ def main(
 				with open(f"{output_folder_name}/results_ablate_task{test_task}_classcomb{t}.pkl", 'wb') as handle:
 					pickle.dump(results_ablate, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+		meanvals_train = np.zeros((len(epoch_snapshots)))
+		meanvals_test = np.zeros((len(epoch_snapshots)))
+
+		for e, epoch in enumerate(epoch_snapshots):
+			meanvals_train[e] = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+			meanvals_test[e] =np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
+		plt.plot(epoch_snapshots, meanvals_train, 'g', label='train')
+		plt.plot(epoch_snapshots, meanvals_test, 'b', label='test')
+		plt.xlabel('Epochs')
+		plt.ylabel('Loss')
+		plt.legend()
+		plt.show()
+		exit()
 
 ##################################################
 
 if __name__ == "__main__":
 
 	# params = loadtxt('params_L4_m2.txt')
-	params = loadtxt("parameters_phase_N_L.txt")
+	# params = loadtxt("parameters_phase_N_L.txt")
 
 	main_kwargs = dict(
 		# network parameters
@@ -260,15 +274,15 @@ if __name__ == "__main__":
 		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
+		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 41, # number of training epochs
+		n_epochs = 20, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
 		frac_train = 110./140., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 10, # size of alphabet
-		snap_freq = 10, # snapshot of net activity every snap_freq epochs
+		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
@@ -281,10 +295,10 @@ if __name__ == "__main__":
 		noise_level = 0.0 # probability of finding an error in a given train sequence
 	)
 
-	for sim_idx, (from_file, to_freeze) in enumerate(zip(
-			[[]], #, ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
-			[[]] #, ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
-		)):
+	from_files = [[]] #[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ]
+	to_freezes = [[]] #[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
+
+	for sim_idx, (from_file, to_freeze) in enumerate(zip(from_files, to_freezes)):
 		
 		main_kwargs['from_file'] = from_file
 		main_kwargs['to_freeze'] = to_freeze
@@ -298,23 +312,23 @@ if __name__ == "__main__":
 		else:
 			transfer=True
 
-		L_col_index = 0
-		n_types_col_index = 1
-		n_hidden_col_index = 2
-		split_id_col_index = 3
-		index = int(sys.argv[1]) - 1
+		# L_col_index = 0
+		# n_types_col_index = 1
+		# n_hidden_col_index = 2
+		# split_id_col_index = 3
+		# index = int(sys.argv[1]) - 1
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 6
-		for i in range(size):
-			row_index = index * size + i
-		# for split_id in range(40):
+		# size = 1
+		# for i in range(size):
+		# 	row_index = index * size + i
+		for split_id in range(1):
 
-			L = int(params[row_index, L_col_index])
-			n_types = int(params[row_index, n_types_col_index])
-			n_hidden = int(params[row_index, n_hidden_col_index])
-			split_id = int(params[row_index, split_id_col_index])
+			L = 0 #int(params[row_index, L_col_index])
+			n_types = 5 #int(params[row_index, n_types_col_index])
+			n_hidden = 128 #int(params[row_index, n_hidden_col_index])
+			# split_id = int(params[row_index, split_id_col_index])
 
 			# Set seeds
 			random.seed(1990+split_id)
@@ -326,32 +340,18 @@ if __name__ == "__main__":
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}"
+				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_{sim_idx}"
 			)
 
-			# input_folder_name = (
-			# 	f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
-			# 	f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
+			# DEFINE FOR TRANSFER EXPERIMENTS
+			input_folder_name = None #(
+			# 	f"TaskRNNClass_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+			# 	f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs41_"
 			# 	f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 			# 	f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-			# 	f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
+			# 	f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}"
 			# )
 			
 			os.makedirs(output_folder_name, exist_ok=True)
 
 			main(L, n_types, n_hidden, split_id, **main_kwargs)
-		
-		# exit()
-
-# for c in range(0, 10):
-# 	print(c)
-# 	filename = f'model_state_classcomb{c}.pth'
-# 	full_state_dict = torch.load(f'{input_folder_name}/{filename}')
-# 	print(full_state_dict.keys())
-# 	# Extract and rename only encoder-related keys
-# 	renamed_encoder_state_dict = {
-# 		k.replace("encoder.rnn.", ""): v for k, v in full_state_dict.items() if k.startswith("encoder.rnn.")
-# 	}
-# 	print(renamed_encoder_state_dict.keys())
-# 	# Save the modified encoder weights
-# 	torch.save(renamed_encoder_state_dict, f"{input_folder_name}/{filename}")
