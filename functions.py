@@ -5,6 +5,8 @@ import string
 from pprint import pprint
 import itertools
 from sklearn.cluster import KMeans
+import random
+
 
 # from find_flat_distribution_subset import *
 
@@ -525,3 +527,76 @@ def compute_feature_variance(token_to_type, classcomb, results, task, n_hidden, 
     }
     print(feature_unit_dict)
     return feature_unit_dict
+
+
+def generate_lattice(D, alphabet):
+	assert len(alphabet) >= D * D, "Alphabet size must be at least D*D. Increase alpha or decrease D."
+	lattice = np.array(alphabet[:D*D]).reshape(D, D)
+	return lattice
+
+def get_neighbors(pos, D):
+    i, j = pos
+    neighbors = []
+    if i > 0: neighbors.append((i - 1, j))
+    if i < D - 1: neighbors.append((i + 1, j))
+    if j > 0: neighbors.append((i, j - 1))
+    if j < D - 1: neighbors.append((i, j + 1))
+    return neighbors
+
+def generate_random_trajectory(lattice, L, alphabet, letter_to_index):
+	D = lattice.shape[0]
+	start = (random.randint(0, D-1), random.randint(0, D-1))
+	trajectory = [start]
+
+	while len(trajectory) < L:
+		current = trajectory[-1]
+		neighbors = get_neighbors(current, D)
+		next_step = random.choice(neighbors)
+		trajectory.append(next_step)
+
+	# Convert to one-hot sequence
+	onehot_seq = np.zeros((L, len(alphabet)), dtype=int)
+	for t, (i, j) in enumerate(trajectory):
+		letter = lattice[i, j]
+		idx = letter_to_index[letter]
+		onehot_seq[t, idx] = 1		
+
+	letters_sequence = [lattice[i, j] for i, j in trajectory]
+	return onehot_seq, letters_sequence
+
+
+def make_sequences(D, L, alpha, frac_train, alphabet, letter_to_index, num_seqs=200):
+	"""
+	Generates a set of sequences based on a lattice structure.
+
+	Returns:
+		list: A list of sequences generated from the lattice.
+	"""
+	lattice = generate_lattice(D, alphabet)
+	sequences = []
+	onehot_sequences = []
+
+	for _ in range(num_seqs):  # Generate 100 sequences
+		onehot, seq = generate_random_trajectory(lattice, L, alphabet, letter_to_index)
+		sequences.append(''.join(seq))
+		onehot_sequences.append(onehot)
+	# Convert to numpy arrays
+	onehot_sequences = np.array(onehot_sequences)
+
+	Z = int(frac_train * len(sequences)) if frac_train < 1 else RaiseError("frac_train must be less than 1 for train-test split")
+	sequences_train  = sequences[:Z]
+	# sequences_train = [list(s) for s in sequences_train]
+	sequences_test  = sequences[Z:]
+	# sequences_test = [list(s) for s in sequences_test]
+
+
+	# convert to torch tensors
+	onehot_sequences = torch.tensor(onehot_sequences, dtype=torch.float32)
+	X_train = onehot_sequences[:Z]
+	X_test = onehot_sequences[Z:]
+
+
+	y_train = torch.zeros((len(sequences_train), alpha), dtype=int)
+	y_test = torch.zeros((len(sequences_test), alpha), dtype=int)
+
+	return X_train.permute((1,0,2)), X_test.permute((1,0,2)), y_train, y_test, sequences_train, sequences_test, np.zeros(len(sequences_train), dtype=int), np.zeros(len(sequences_test), dtype=int)

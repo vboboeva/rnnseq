@@ -88,6 +88,7 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 ##########################################
 
 def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, cue_size, epoch=None, idx_ablate = [], class_ablate=None):
+
 	for (X, y, tokens) in zip([X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
 		X = X.permute((1,0,2))
 
