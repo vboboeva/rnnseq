@@ -345,7 +345,7 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
 
-def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots):
+def make_results_dict(tokens_train, labels_train, epoch_snapshots, cue_size):
 
 	results = {}
 	token_to_type = {}
@@ -354,18 +354,20 @@ def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoc
 	for measure in ['Loss', 'Retrieval', 'HiddenAct', 'LatentAct']:
 		results.update({measure:{}}) 
 
-		for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+		for set_, tokens, labels in (zip(['train'], [tokens_train], [labels_train])):
 
 			tokens = [''.join(token) for token in tokens]
 		
 			for token, label in (zip(tokens, labels)):
-				token_to_set.update({token:set_}) 
-				token_to_type.update({token:label})
+				token_key = list(token)[:cue_size][0] 
 
-				results[measure].update({token:{}})
+				token_to_set.update({token_key:set_}) 
+				token_to_type.update({token_key:label})
+
+				results[measure].update({token_key:{}})
 
 				for epoch in epoch_snapshots:
-					results[measure][token].update({epoch:{}})
+					results[measure][token_key].update({epoch:{}})
 					
 	results['Whh'] = []
 	return results, token_to_type, token_to_set
@@ -543,15 +545,32 @@ def get_neighbors(pos, D):
     if j < D - 1: neighbors.append((i, j + 1))
     return neighbors
 
-def generate_random_trajectory(lattice, L, alphabet, letter_to_index):
+def generate_random_trajectory(lattice, L, alphabet, letter_to_index, start_letter):
 	D = lattice.shape[0]
-	start = (random.randint(0, D-1), random.randint(0, D-1))
+	# print(start_letter)
+	# Find the position of the start_letter in the lattice
+	start_positions = np.argwhere(lattice == start_letter)
+
+	if len(start_positions) == 0:
+		raise ValueError(f"Start letter '{start_letter}' not found in lattice.")
+
+	start = tuple(start_positions[0])  # convert from array to (i, j)
+
 	trajectory = [start]
 
 	while len(trajectory) < L:
 		current = trajectory[-1]
 		neighbors = get_neighbors(current, D)
-		next_step = random.choice(neighbors)
+
+		# Exclude neighbors that lead to the same letter as the last step
+		last_letter = lattice[current]
+		valid_neighbors = [pos for pos in neighbors if lattice[pos] != last_letter]
+
+		if not valid_neighbors:
+			# If all neighbors lead to same letter, restart from the same start_letter
+			return generate_random_trajectory(lattice, L, alphabet, letter_to_index, start_letter)
+
+		next_step = random.choice(valid_neighbors)
 		trajectory.append(next_step)
 
 	# Convert to one-hot sequence
@@ -559,13 +578,16 @@ def generate_random_trajectory(lattice, L, alphabet, letter_to_index):
 	for t, (i, j) in enumerate(trajectory):
 		letter = lattice[i, j]
 		idx = letter_to_index[letter]
-		onehot_seq[t, idx] = 1		
+		onehot_seq[t, idx] = 1
 
 	letters_sequence = [lattice[i, j] for i, j in trajectory]
+	# print(letters_sequence)
+
 	return onehot_seq, letters_sequence
 
 
-def make_sequences(D, L, alpha, frac_train, alphabet, letter_to_index, num_seqs=200):
+
+def make_sequences(D, L, alpha, frac_train, alphabet, letter_to_index):
 	"""
 	Generates a set of sequences based on a lattice structure.
 
@@ -576,27 +598,20 @@ def make_sequences(D, L, alpha, frac_train, alphabet, letter_to_index, num_seqs=
 	sequences = []
 	onehot_sequences = []
 
-	for _ in range(num_seqs):  # Generate 100 sequences
-		onehot, seq = generate_random_trajectory(lattice, L, alphabet, letter_to_index)
+	for start_letter in alphabet:  # Generate 100 sequences
+		onehot, seq = generate_random_trajectory(lattice, L, alphabet, letter_to_index, start_letter)
 		sequences.append(''.join(seq))
 		onehot_sequences.append(onehot)
+
 	# Convert to numpy arrays
 	onehot_sequences = np.array(onehot_sequences)
 
-	Z = int(frac_train * len(sequences)) if frac_train < 1 else RaiseError("frac_train must be less than 1 for train-test split")
-	sequences_train  = sequences[:Z]
-	# sequences_train = [list(s) for s in sequences_train]
-	sequences_test  = sequences[Z:]
-	# sequences_test = [list(s) for s in sequences_test]
-
+	sequences_train  = sequences
 
 	# convert to torch tensors
 	onehot_sequences = torch.tensor(onehot_sequences, dtype=torch.float32)
-	X_train = onehot_sequences[:Z]
-	X_test = onehot_sequences[Z:]
-
+	X_train = onehot_sequences
 
 	y_train = torch.zeros((len(sequences_train), alpha), dtype=int)
-	y_test = torch.zeros((len(sequences_test), alpha), dtype=int)
 
-	return X_train.permute((1,0,2)), X_test.permute((1,0,2)), y_train, y_test, sequences_train, sequences_test, np.zeros(len(sequences_train), dtype=int), np.zeros(len(sequences_test), dtype=int)
+	return X_train.permute((1,0,2)), y_train, sequences_train, np.zeros(len(sequences_train), dtype=int)

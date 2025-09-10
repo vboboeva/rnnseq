@@ -101,7 +101,7 @@ def main(
 		# X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(types_chosen, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
 	
 	t=0
-	X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_sequences(n_types, L, alpha, frac_train, alphabet, letter_to_index)
+	X_train, y_train, tokens_train, labels_train = make_sequences(n_types, cue_size+L, alpha, frac_train, alphabet, letter_to_index)
 
 	# Train and test network
 	n_batches = len(tokens_train) // batch_size
@@ -146,11 +146,11 @@ def main(
 		test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
 		results_list = []
 		for test_task in test_tasks:
-			results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots)
+			results, token_to_type, token_to_set = make_results_dict(tokens_train, labels_train, epoch_snapshots, cue_size)
 			results_list.append(results)
 	else:
 		test_tasks = [task]
-		results, token_to_type, token_to_set = make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots)
+		results, token_to_type, token_to_set = make_results_dict(tokens_train, labels_train, epoch_snapshots, cue_size)
 		results_list = [results]
 
 	print('TRAINING NETWORK')
@@ -161,16 +161,12 @@ def main(
 
 			for test_task, results in zip(test_tasks, results_list):
 
-				test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, epoch=epoch)
+				test_save(results, model, X_train, y_train, tokens_train, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, epoch=epoch)
 				
-				meanval_train = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
+				meanval = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys()])
 
-				meanval_test=np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
-
-				print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
-		
-				print('\n')
-
+				print(f'{test_task} Loss Tr {meanval:.2f}')
+	
 		train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
 
 	print('SAVING RESULTS')
@@ -265,20 +261,20 @@ if __name__ == "__main__":
 		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
+		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 101, # number of training epochs
+		n_epochs = 20, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 0.8, # fraction of dataset to train on
+		frac_train = 1, # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
-		alpha = 25, # size of alphabet
-		snap_freq = 5, # snapshot of net activity every snap_freq epochs
+		alpha = 9, # size of alphabet
+		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
 		delay = 0, # number of zero-padding steps at end of input
-		cue_size = 4, # number of letters to cue net with (prediction task only!!)
+		cue_size = 1, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class', # choose btw 'class' and 'whatwhere'
 		teacher_forcing_ratio = 1.,  # Add teacher forcing ratio parameter
 		train_test_letters = 'Overlapping', # choose btw 'Disjoint' and 'Overlapping' and 'SemiOverlapping'
@@ -310,14 +306,14 @@ if __name__ == "__main__":
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 6
+		size = 1
 		for i in range(size):
 			# row_index = index * size + i
 
-			L = 10#int(params[row_index, L_col_index])
-			n_types = 5#int(params[row_index, n_types_col_index])
-			n_hidden = 160#int(params[row_index, n_hidden_col_index])
-			split_id = 0#int(params[row_index, split_id_col_index])
+			L = 499 #int(params[row_index, L_col_index])
+			n_types = 3 #int(params[row_index, n_types_col_index])
+			n_hidden = 160 #int(params[row_index, n_hidden_col_index])
+			split_id = 0 #int(params[row_index, split_id_col_index])
 
 			# Set seeds
 			random.seed(1990+split_id)

@@ -87,12 +87,13 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 # 				test network 			 #
 ##########################################
 
-def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, cue_size, epoch=None, idx_ablate = [], class_ablate=None):
+def test_save(results, model, X_train, y_train, tokens_train, letter_to_index, index_to_letter, which_task, which_objective, n_hidden, L, alphabet, delay, cue_size, epoch=None, idx_ablate = [], class_ablate=None):
 
-	for (X, y, tokens) in zip([X_train, X_test], [y_train, y_test], [tokens_train, tokens_test]):
+	for (X, y, tokens) in zip([X_train], [y_train], [tokens_train]):
 		X = X.permute((1,0,2))
 
 		for (_X, _y, token) in zip(X, y, tokens):
+			token_key = token[:cue_size]
 			token = ''.join(token)
 
 			output, loss, hidden = tokenwise_test(_X, _y, token, model, L, alphabet, letter_to_index, index_to_letter, which_objective, which_task, n_hidden=n_hidden, delay=delay, cue_size=cue_size, idx_ablate = idx_ablate)
@@ -102,15 +103,15 @@ def test_save(results, model, X_train, X_test, y_train, y_test, tokens_train, to
 			else:
 				whichkey = class_ablate
 
-			results['Loss'][token][whichkey] = loss
-			results['Retrieval'][token][whichkey] = output
+			results['Loss'][token_key][whichkey] = loss
+			results['Retrieval'][token_key][whichkey] = output
 
 			if which_task == 'RNNClass' or which_task == 'RNNPred':
-				results['HiddenAct'][token][whichkey] = hidden.detach().cpu().numpy()
+				results['HiddenAct'][token_key][whichkey] = hidden.detach().cpu().numpy()
 			
 			elif which_task == 'RNNAuto':
-				results['HiddenAct'][token][whichkey] = hidden[0].detach().cpu().numpy()
-				results['LatentAct'][token][whichkey] = hidden[1].detach().cpu().numpy()
+				results['HiddenAct'][token_key][whichkey] = hidden[0].detach().cpu().numpy()
+				results['LatentAct'][token_key][whichkey] = hidden[1].detach().cpu().numpy()
 
 
 def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_letter, objective, task, n_hidden, delay=0, cue_size=1, idx_ablate = []):
@@ -136,7 +137,7 @@ def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_le
 			# loss is btw activation of output layer at all but last time step (:-1) and target which is sequence starting from second letter (1:)
 			loss = loss_function(out[:-1], X[1:])
 			# CE between logits for retrieved sequence and token (input) -- NOT RELEVANT
-			cue = [str(s) for s in token[:cue_size]] # put token[0] for cueing single letter
+			cue = [str(s) for s in token[:cue_size]]
 			predicted = predict(len(alphabet), model, letter_to_index, index_to_letter, cue, L)
 			predicted = ''.join(predicted)
 
@@ -165,11 +166,11 @@ def tokenwise_test(X, y, token, model, L, alphabet, letter_to_index, index_to_le
 			ht = (ht_, latent)  # Append along time dimension
 	return predicted, loss.item(), ht
 
-def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_letters):
+def predict(alpha, model, letter_to_index, index_to_letter, seq_start, Lp):
 	with torch.no_grad():
 
 		# goes through each of the seq_start we want to predict
-		for i in range(0, len_next_letters):
+		for i in range(0, Lp):
 
 			# define x as a sequence of one-hot vectors
 			# corresponding to the letters cued
@@ -182,12 +183,12 @@ def predict(alpha, model, letter_to_index, index_to_letter, seq_start, len_next_
 			_, y_pred = model.forward(x)
 
 			# last_letter_logits has dimension alpha
-			last_letter_logits = y_pred[-1,:]
+			last_letter_logits = y_pred[-1, :]
 			# applies a softmax to transform activations into a proba, has dimensions alpha
 			proba = torch.softmax(last_letter_logits, dim=0).detach().cpu().numpy()
 			# then samples randomly from that proba distribution 
-			# letter_index = np.random.choice(len(last_letter_logits), p=proba)
-			letter_index = np.argmax(proba)
+			letter_index = np.random.choice(len(last_letter_logits), p=proba)
+			# letter_index = np.argmax(proba)
 
 			# appends it into the sequence produced
 			seq_start.append(index_to_letter[letter_index])
