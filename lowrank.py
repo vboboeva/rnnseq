@@ -25,8 +25,8 @@ folder_name = join(f'Task{par.task}_N{par.n_hidden}_nlatent{par.n_latent}_L{par.
                    
                   )
 
-data_dir = join(par.folder, folder_name)
-print("Data dir: ", data_dir)
+DATA_DIR = join(par.folder, folder_name)
+print("Data dir: ", DATA_DIR)
 
 
 classcomb_path = join(par.folder, folder_name, 'classes.pkl')
@@ -50,9 +50,9 @@ def get_all_sims_paths (folder_name):
     """
     Get all simulation paths for a given folder name.
     """
-    model_paths = sorted(glob(join(data_dir, f'model_state_classcomb{par.classcomb}_sim*.pth')))
-    # model_paths = sorted(glob(join(data_dir, f'model_state_classcomb{par.classcomb}_sim*.pth')))
-    results_paths = sorted(glob(join(data_dir, f'results_task{par.task}_classcomb{par.classcomb}_sim*.pkl')))
+    model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
+    # model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
+    results_paths = sorted(glob(join(DATA_DIR, f'results_task{par.task}_classcomb{par.classcomb}_sim*.pkl')))
     return model_paths, results_paths
 
 
@@ -62,7 +62,7 @@ model_paths, results_paths = get_all_sims_paths(folder_name)
 #     print(f"{str(i):<5}{path}")
 # for i, path in enumerate(results_paths):
 #     print(f"{str(i):<5}{path}")
-mean_model_path = join(data_dir, f'model_state_classcomb{par.classcomb}_mean.pth')
+mean_model_path = join(DATA_DIR, f'model_state_classcomb{par.classcomb}_mean.pth')
 
 
 print('Load all results')
@@ -97,13 +97,11 @@ all_rec_weights = [m['h2h.weight'].numpy() for m in all_models]
 
 # extract all biases (only those in the recurrent layer are supposed to be non-vanishing)
 all_rec_biases = [m['h2h.bias'].numpy() for m in all_models]
-out_bias = True
 try:
     all_out_biases = [m['h2o.bias'].numpy() for m in all_models]
 except KeyError as e:
     out_bias = False
     print(f"{type(e).__name__}: {e}.\nNo output bias in these simulations")
-
 
 print('Perform NEW SVDs')
 # SVD of recurrent weights
@@ -144,41 +142,7 @@ all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     
 all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-# Compute average transformed weights across simulations
-mean_all_output_weights_proj = np.mean(all_output_weights_proj, axis=0)
-mean_all_input_weights_proj = np.mean(all_input_weights_proj, axis=0)
-mean_all_rec_weights_proj = np.mean(all_rec_weights_proj, axis=0)
-mean_all_rec_biases_proj = np.mean(all_rec_biases_proj, axis=0)
-
-# # Recreating a "filtered" version of the weights by rotating "back" the average low-rank
-# all_output_weights_filtered = [mean_all_output_weights_proj @ R for R in all_Rs]
-# all_input_weights_filtered = [R.T @ mean_all_input_weights_proj for R in all_Rs]
-# all_rec_weights_filtered = [R.T @ mean_all_rec_weights_proj @ R for R in all_Rs]
-# all_rec_biases_filtered = [R.T @ mean_all_rec_biases_proj for R in all_Rs]
-
-# Recreate all recurrent weight matrices with the average spectrum (show that mean can support task)
-# 1. Define the diagonal matrix with the spectrum of the average (rotated) weights
-S_bar = np.linalg.svd(mean_all_rec_weights_proj, compute_uv=False) * np.eye(len(mean_all_rec_weights_proj))
-# print(S_bar[:10,:10])
-# 2. Re-compose the (filtered) weight matrices by multiplying by the left and right singular vectors
-all_rec_weights_filtered = [U @ S_bar @ Vh for U, Vh in zip(all_rec_Us, all_rec_Vhs)]
-
-print("Saving transformed weights")
-
-for sim_id, (W_out, W_in, W_rec, b_rec) in enumerate(zip(
-        # all_output_weights_filtered, all_input_weights_filtered, all_rec_weights_filtered, all_rec_biases_filtered
-        all_output_weights, all_input_weights, all_rec_weights_filtered, all_rec_biases
-    )):
-    model_dict = {}
-    model_dict['i2h.weight'] = torch.tensor(W_in, dtype=torch.float)
-    model_dict['h2o.weight'] = torch.tensor(W_out, dtype=torch.float)
-    model_dict['h2h.weight'] = torch.tensor(W_rec, dtype=torch.float)
-    model_dict['h2h.bias'] = torch.tensor(b_rec, dtype=torch.float)
-    if out_bias:
-        model_dict['h2o.bias'] = torch.tensor(all_out_biases[sim_id], dtype=torch.float)
-    # print(f"{str(sim_id):<5}: {', '.join(list(model_dict.keys()))}")
-    torch.save(model_dict, join(data_dir, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}.pth'))
-    # torch.save(model_dict, join(data_dir, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}_epoch{_epoch}.pth'))
+make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
 
 ############### ANALYSIS OF HIDDEN-LAYER ACTIVITY ###############################################
 
@@ -200,7 +164,6 @@ all_hs_class = [{c: np.take(h, np.where(classes==c)[0], axis=2)[-1] for c in uni
 plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs, types_set, FIGS_DIR)
 
 #############################################################   ANALYSIS OF WEIGHTS #############################################################
-
 
 print('Plot weights -- their SVDs')
 
@@ -271,5 +234,6 @@ print('Cosine similarity')
 
 plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR)
 
+# plot_UC()
 
 
