@@ -29,7 +29,7 @@ def main(
 	m = 2,
 	task=None,
 	objective='CE',
-	model_filename=None, 
+	input_folder_name=None, 
 	from_file = [], 
 	to_freeze = [], 
 	init_weights=None, 
@@ -87,12 +87,11 @@ def main(
 	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
 
 	for t, types_chosen in enumerate(list(type_combinations)):
-
-		num_classes = len(types_chosen)
-		if from_file != []:
+		
+		if input_folder_name is not None:
 			model_filename = f'{input_folder_name}/model_state_classcomb{t}.pth' # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
-		else:
-			model_filename=None
+	
+		num_classes = len(types_chosen)
 
 		print('types_chosen', types_chosen)
 
@@ -257,7 +256,7 @@ if __name__ == "__main__":
 		m = 2, # number of unique letters in each sequence
 		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
-		# model_filename = 'model_state_classcomb0.pth', # choose btw None or file of this format ('model_state_datasplit0.pth') if initializing state of model from file
+		input_folder_name = None, # folder containing state of model from file
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
 		init_weights = 'Rich', # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
@@ -286,17 +285,9 @@ if __name__ == "__main__":
 			[[]] #, ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
 		)):
 		
-		main_kwargs['from_file'] = from_file
-		main_kwargs['to_freeze'] = to_freeze
-		
-		print(sim_idx, main_kwargs['from_file'], main_kwargs['to_freeze'])
-
+	
 		# parameters
 		alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
-		if main_kwargs['from_file'] == []:
-			transfer=False
-		else:
-			transfer=True
 
 		L_col_index = 0
 		n_types_col_index = 1
@@ -329,13 +320,24 @@ if __name__ == "__main__":
 				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}"
 			)
 
-			# input_folder_name = (
-			# 	f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
-			# 	f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
-			# 	f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
-			# 	f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-			# 	f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
-			# )
+
+			main_kwargs['from_file'] = from_file
+			main_kwargs['to_freeze'] = to_freeze
+			
+			print(sim_idx, main_kwargs['from_file'], main_kwargs['to_freeze'])
+			
+			if main_kwargs['from_file'] == []:
+				transfer=False
+				model_filename=None
+			else:
+				transfer=True
+				main_kwargs['input_folder_name'] = (
+					f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+					f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs20_"
+					f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
+					f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
+					f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_0"
+				)
 			
 			os.makedirs(output_folder_name, exist_ok=True)
 
