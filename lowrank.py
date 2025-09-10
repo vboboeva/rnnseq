@@ -21,11 +21,7 @@ from lowrank_utils import * #plot_mean_loss, align_singular_vectors, plot_SVD_re
 folder_name = join(f'Task{par.task}_N{par.n_hidden}_nlatent{par.n_latent}_L{par.L}_m{par.m}_alpha{par.alpha}'+\
                    f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}'+\
                    # f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}_'+\
-                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{datasplit}_0'
-                   
-                   # '_transfer_mean'
-                   #f'_noise{par.train_noise:.3f}'
-                   # f'_{transfer_id}'
+                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{par.datasplit}_noise{par.train_noise:.3f}'
                    
                   )
 
@@ -37,7 +33,7 @@ classcomb_path = join(par.folder, folder_name, 'classes.pkl')
 with open(classcomb_path, 'rb') as handle:
     classcomb = pickle.load(handle)
 
-types_set = list(classcomb[classcomb])
+types_set = list(classcomb[par.classcomb])
 token_to_type_path = join(par.folder, folder_name, f'token_to_type_classcomb{par.classcomb}.pkl')
 with open(token_to_type_path, 'rb') as handle:
     token_to_type = pickle.load(handle)
@@ -62,14 +58,12 @@ def get_all_sims_paths (folder_name):
 
 model_paths, results_paths = get_all_sims_paths(folder_name)
 
-for i, path in enumerate(model_paths):
-    print(f"{str(i):<5}{path}")
-for i, path in enumerate(results_paths):
-    print(f"{str(i):<5}{path}")
+# for i, path in enumerate(model_paths):
+#     print(f"{str(i):<5}{path}")
+# for i, path in enumerate(results_paths):
+#     print(f"{str(i):<5}{path}")
 mean_model_path = join(data_dir, f'model_state_classcomb{par.classcomb}_mean.pth')
 
-# if input("Continue? (Y/n) ").lower() in ['no', 'n']:
-#     exit()
 
 print('Load all results')
 all_models = [torch.load(path, map_location="cpu") for path in model_paths]
@@ -182,7 +176,7 @@ for sim_id, (W_out, W_in, W_rec, b_rec) in enumerate(zip(
     model_dict['h2h.bias'] = torch.tensor(b_rec, dtype=torch.float)
     if out_bias:
         model_dict['h2o.bias'] = torch.tensor(all_out_biases[sim_id], dtype=torch.float)
-    print(f"{str(sim_id):<5}: {', '.join(list(model_dict.keys()))}")
+    # print(f"{str(sim_id):<5}: {', '.join(list(model_dict.keys()))}")
     torch.save(model_dict, join(data_dir, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}.pth'))
     # torch.save(model_dict, join(data_dir, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}_epoch{_epoch}.pth'))
 
@@ -193,7 +187,7 @@ print('Plot SVD results')
 all_hs_proj = [np.dot(h, R.T) for h, R in zip(all_hs, all_Rs)]
 all_final_hs_proj = [h[_epoch_time_ids] for h in all_hs_proj]
 
-plot_SVD_results(all_final_VEs, all_final_hs_proj, all_Rs, n_components=6, FIGS_DIR, cmap='bwr')
+plot_SVD_results(all_final_VEs, all_final_hs_proj, all_Rs, FIGS_DIR, n_components=6, cmap='bwr')
 
 # Dimensionality reduces over time for any given class
 print('Compute and plot dimensionality over time')
@@ -207,8 +201,22 @@ plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs, types_set, FIGS_DIR)
 
 #############################################################   ANALYSIS OF WEIGHTS #############################################################
 
+
+print('Plot weights -- their SVDs')
+
+# # Transforming the weights in each simulation using Vh brings them all close
+# all_output_weights_proj = [W @ R.T for R, W in zip(all_Rs, all_output_weights)] # (C, N) x (N, N)
+# all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     # (N, N) x (N, a)
+# all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
+# all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
+
+plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
+
+print('Plot recurrent weights')
+
 plot_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
 
+print('Plot all weights')
 
 plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, FIGS_DIR)
 
@@ -241,20 +249,21 @@ hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.item
 # hs_proj_class = np.mean(hs_proj_class, axis=1) # (class, time, seq, N)    
 # one plot for each time step
 
-plot_alignment_weights_activity_class(all_rec_Vhs_aligned, all_hs_class, types_set, FIGS_DIR)
+plot_alignment_weights_activity_class(hs_proj_class, types_set, FIGS_DIR)
 
 
-plot_alignment_weights_activity_timestep(all_rec_Vhs_aligned, all_hs_class, types_set, FIGS_DIR)
+plot_alignment_weights_activity_timestep(hs_proj_class, types_set, FIGS_DIR)
 
 print('Compute components of activity along weights SVs - all simulations separately')
+
+
+plot_alignment_activity_trans(hs_proj_class, types_set, FIGS_DIR)
 
 hs_proj_class = defaultdict(list)
 for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
     for c, hs in hs_class.items():
         hs_proj_class[c].append(np.dot(hs, rec_Vh.T))
 hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, seq, N)
-
-plot_alignment_activity_trans(hs_proj_class, types_set, FIGS_DIR)
 
 plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_DIR)
 
