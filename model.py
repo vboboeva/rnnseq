@@ -118,8 +118,6 @@ class RNN (Net):
 		self.d_output = d_output
 		self.d_hidden = d_hidden
 
-		self.initialize_weights(init, seed=sim_id)
-
 		self.i2h = layer_type(d_input, d_hidden, bias=0)
 		if 'i2h' in to_freeze:
 			freeze(self.i2h)
@@ -164,6 +162,9 @@ class RNN (Net):
 		elif drop_l == "all":
 			drop_l = ",".join([str(i+1) for i in range(self.n_layers)])
 		drop_l = drop_l.split(",")
+
+		self.initialize_weights(init, seed=sim_id)
+
 
 	def initialize_weights(self, init, seed=None):
 		print('init', init)
