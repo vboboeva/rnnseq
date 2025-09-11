@@ -130,7 +130,7 @@ class RNN (Net):
 		if 'h2h' in from_file:
 			self._from_file += ['h2h.'+n for n,_ in self.h2h.named_parameters()]
 
-		self.h2o = layer_type(d_hidden, d_output, bias=0)
+		self.h2o = layer_type(d_hidden, d_output, bias=bias)
 		if 'h2o' in to_freeze:
 			freeze(self.h2o)
 		if 'h2o' in from_file:
