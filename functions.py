@@ -327,7 +327,7 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 
 	tokens_train, labels_train = letter_to_seq(types, train_letters)
 	X_train, y_train = seq_to_vectors(tokens_train, labels_train, alpha, letter_to_index, len(types), noise_level)
-	
+
 	if frac_train == 1:
 		tokens_test = []
 		labels_test = []
