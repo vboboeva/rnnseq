@@ -167,7 +167,10 @@ def main(
 			
 					print('\n')
 
-			train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
+			try:
+				train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
+			except Exception as e:
+				print(f"{type(e).__name__}: {e}.\nSkipping training step.")
 
 		print('SAVING RESULTS')
 		# Save the model state
@@ -267,7 +270,7 @@ if __name__ == "__main__":
 		frac_train = 1., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 10, # size of alphabet
-		snap_freq = 1, # snapshot of net activity every snap_freq epochs
+		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
@@ -286,6 +289,9 @@ if __name__ == "__main__":
 			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], ['h2h'], ['i2h'], ['h2h', 'i2h'] ], 
 			[[], ['h2h'], ['i2h'], ['h2h', 'i2h'], [], [], [] ]
 		)):
+
+		if sim_idx == 1:
+			continue
 		
 		main_kwargs['from_file'] = from_file
 		main_kwargs['to_freeze'] = to_freeze
@@ -308,7 +314,7 @@ if __name__ == "__main__":
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 1
+		size = 100
 		for i in range(size):
 			row_index = index * size + i
 
@@ -323,7 +329,7 @@ if __name__ == "__main__":
 			np.random.seed(1990+split_id)
 
 			output_folder_name = (
-				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"test_avg/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
@@ -331,7 +337,7 @@ if __name__ == "__main__":
 			)
 
 			input_folder_name = (
-				f"Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"test_avg/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs26_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
