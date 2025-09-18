@@ -202,7 +202,7 @@ def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs,types_set, FIGS_DI
     plt.close(fig)
 
 
-def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
+def plot_SVDs_weights(all_weights, all_weights_proj, FIGS_DIR, label='None'):
     #
     # Labels with main text notation
     #
@@ -210,8 +210,8 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     # all SVDs are the same across simulations -- whether we rotate or not
     # but the SVDs of the average matrices are going to be very different
 
-    all_rec_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights_proj]
-    all_rec_S = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights]
+    all_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_weights_proj]
+    all_S = [np.linalg.svd(W, compute_uv=False) for W in all_weights]
 
     fig, ax = plt.subplots(figsize=(3,1.6))
     n_components = 15
@@ -224,16 +224,16 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.set_xticklabels([str(t) for t in _xticks])
     # ax.set_yticklabels([str(t) for t in _yticks])
     ax.axvspan(0, 3.5, color='wheat', alpha=0.5, lw=0)
-    # for S_proj, S in zip(all_rec_S_proj,all_rec_S):
+    # for S_proj, S in zip(all_S_proj,all_S):
     #     ax.plot(np.arange(n_components)+1, S[:n_components], c='b', lw=.1, alpha=.2)
-    ax.plot(np.arange(n_components)+1, np.mean(all_rec_S,axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
+    ax.plot(np.arange(n_components)+1, np.mean(all_S,axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
     ax.fill_between(np.arange(n_components)+1,
-                    np.percentile(all_rec_S,5,axis=0)[:n_components],
-                    np.percentile(all_rec_S,95,axis=0)[:n_components],
+                    np.percentile(all_S,5,axis=0)[:n_components],
+                    np.percentile(all_S,95,axis=0)[:n_components],
                     ls='--', color='b', lw=0, alpha=.2, label='av S orig')
-    # ax.plot(np.arange(n_components)+1, np.mean(all_rec_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
-    S_mean = np.linalg.svd(np.mean(all_rec_weights, axis=0), compute_uv=False)
-    S_mean_proj = np.linalg.svd(np.mean(all_rec_weights_proj, axis=0), compute_uv=False)
+    # ax.plot(np.arange(n_components)+1, np.mean(all_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
+    S_mean = np.linalg.svd(np.mean(all_weights, axis=0), compute_uv=False)
+    S_mean_proj = np.linalg.svd(np.mean(all_weights_proj, axis=0), compute_uv=False)
     ax.plot(np.arange(n_components)+1,S_mean[:n_components], c='b', lw=1, marker='o', markersize=3, label='S av orig')
     ax.plot(np.arange(n_components)+1,S_mean_proj[:n_components], c='r', lw=1, marker='o', markersize=3, label='S av rot')
     # ax.set_ylim(.1,10)
@@ -242,7 +242,7 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.set_ylabel("Singular value")
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     fig.tight_layout()
-    fig.savefig(join(FIGS_DIR, f'SVDs_recurrent_weights.svg'), dpi=300)
+    fig.savefig(join(FIGS_DIR, f'SVDs_recurrent_{label}.svg'), dpi=300)
     plt.close(fig)
 
 def plot_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):

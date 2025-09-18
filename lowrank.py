@@ -21,7 +21,7 @@ from lowrank_utils import * #plot_mean_loss, align_singular_vectors, plot_SVD_re
 folder_name = join(f'Task{par.task}_N{par.n_hidden}_nlatent{par.n_latent}_L{par.L}_m{par.m}_alpha{par.alpha}'+\
                    f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}'+\
                    # f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}_'+\
-                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{par.datasplit}_noise{par.train_noise:.3f}'
+                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{par.datasplit}'
                    
                   )
 
@@ -173,11 +173,15 @@ print('Plot weights -- their SVDs')
 # all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
 # all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
+plot_SVDs_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR, label='Recurrent')
 
-print('Plot recurrent weights')
+plot_SVDs_weights(all_input_weights, all_input_weights_proj, FIGS_DIR, label='Input')
+
+plot_SVDs_weights(all_output_weights, all_output_weights_proj, FIGS_DIR, label='Output')
 
 plot_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
+
+print('Plot recurrent weights')
 
 print('Plot all weights')
 
