@@ -366,8 +366,7 @@ def augment_dataset (X_train, X_test, y_train, y_test,
 
 	labels_test_augmented = np.concatenate(num_augmented*[labels_test], axis=0)
 
-	return X_train_augmented, X_test_augmented, y_train_augmented, y_test_augmented,
-		   tokens_train_augmented, tokens_test_augmented, labels_train_augmented, labels_test_augmented
+	return X_train_augmented, X_test_augmented, y_train_augmented, y_test_augmented, tokens_train_augmented, tokens_test_augmented, labels_train_augmented, labels_test_augmented
 
 
 def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots):
