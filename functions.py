@@ -5,6 +5,7 @@ import string
 from pprint import pprint
 import itertools
 from sklearn.cluster import KMeans
+from data_utils import augment_data
 
 # from find_flat_distribution_subset import *
 
@@ -341,6 +342,33 @@ def make_tokens(types, alpha, m, frac_train, letter_to_index, train_test_letters
 	print('number of testing tokens', len(tokens_test))
 
 	return X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test
+
+
+def augment_dataset (X_train, X_test, y_train, y_test,
+					 tokens_train, tokens_test, labels_train, labels_test,
+					 num_augmented=1000):
+	
+	X_train_augmented = augment_data(X_train, num_augmented-1, flatten=False)
+	X_train_augmented = torch.cat([X_train] + list(X_train_augmented), dim=1)
+
+	X_test_augmented = augment_data(X_test, num_augmented-1, flatten=False)
+	X_test_augmented = torch.cat([X_test] + list(X_test_augmented), dim=1)
+
+	y_train_augmented = torch.cat(num_augmented*[y_train], dim=0)
+
+	y_test_augmented = torch.cat(num_augmented*[y_test], dim=0)
+
+	tokens_train_augmented = np.concatenate(num_augmented*[tokens_train], axis=0)
+
+	tokens_test_augmented = np.concatenate(num_augmented*[tokens_test], axis=0)
+
+	labels_train_augmented = np.concatenate(num_augmented*[labels_train], axis=0)
+
+	labels_test_augmented = np.concatenate(num_augmented*[labels_test], axis=0)
+
+	return X_train_augmented, X_test_augmented, y_train_augmented, y_test_augmented,
+		   tokens_train_augmented, tokens_test_augmented, labels_train_augmented, labels_test_augmented
+
 
 def make_results_dict(tokens_train, tokens_test, labels_train, labels_test, epoch_snapshots):
 
