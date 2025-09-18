@@ -17,6 +17,8 @@ from train import test_save
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
 from pprint import pprint
 
+from data_utils import augment_data
+
 ###########################################
 ################## M A I N ################
 ###########################################
@@ -98,6 +100,11 @@ def main(
 		print('types_chosen', types_chosen)
 
 		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(types_chosen, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
+
+		# Data augmentation
+		num_augmented = 1000
+
+		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = augment_dataset(X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_augmented=num_augmented)
 
 		# Train and test network
 		n_batches = len(tokens_train) // batch_size
