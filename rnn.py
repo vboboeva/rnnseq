@@ -32,7 +32,8 @@ def main(
 	task=None,
 	objective='CE',
 	from_file = [], 
-	to_freeze = [], 
+	to_freeze = [],
+	max_rank=None,
 	init_weights=None, 
 	learning_rate = 0.001,
 	transfer_func='relu',
@@ -269,6 +270,7 @@ if __name__ == "__main__":
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
+		max_rank=None,
 		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
