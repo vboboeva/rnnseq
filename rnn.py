@@ -102,7 +102,7 @@ def main(
 		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(types_chosen, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
 
 		# Data augmentation
-		num_augmented = 1000
+		num_augmented = 3
 
 		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = augment_dataset(X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_augmented=num_augmented)
 
@@ -277,7 +277,7 @@ if __name__ == "__main__":
 		frac_train = 1., # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 10, # size of alphabet
-		snap_freq = 5, # snapshot of net activity every snap_freq epochs
+		snap_freq = 1, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
