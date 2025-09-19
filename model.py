@@ -124,7 +124,8 @@ class RNN (Net):
 			output_activation=None, # choose btw softmax for classification vs linear for regression tasks
 			drop_l=None,
 			nonlinearity='relu',
-			layer_type=nn.Linear,
+			layer_type=LinearLowRank,
+			max_rank=None,
 			init_weights=None,
 			model_filename=None, # file with model parameters
 			to_freeze = [], # parameters to keep frozen; list with elements in ['i2h', 'h2h', 'h2o']
@@ -153,7 +154,7 @@ class RNN (Net):
 		if 'i2h' in from_file:
 			self._from_file += ['i2h.'+n for n,_ in self.i2h.named_parameters()]
 
-		self.h2h = layer_type(d_hidden, d_hidden, bias=bias)
+		self.h2h = layer_type(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
 		if 'h2h' in to_freeze:
 			freeze(self.h2h)
 		if 'h2h' in from_file:
