@@ -29,6 +29,36 @@ class LinearWeightDropout(nn.Linear):
 			return output
 		return output + self.bias
 
+
+class LinearLowRank(nn.Module):
+    def __init__(self, in_features, out_features, max_rank=None, bias=True):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.max_rank = max_rank
+
+        if max_rank is None or max_rank >= min(in_features, out_features):
+            # Fall back to full-rank linear
+            self.linear = nn.Linear(in_features, out_features, bias=bias)
+            self.use_full = True
+        else:
+            # Low-rank factorization
+            self.U = nn.Parameter(torch.randn(out_features, max_rank))
+            self.V = nn.Parameter(torch.randn(in_features, max_rank))
+            if bias:
+                self.bias = nn.Parameter(torch.zeros(out_features))
+            else:
+                self.bias = None
+            self.use_full = False
+
+    def forward(self, x):
+        if self.use_full:
+            return self.linear(x)
+        else:
+            weight = self.U @ self.V.T  # [out_features, in_features]
+            return F.linear(x, weight, self.bias)
+
+
 class Net(nn.Module):
 	'''
 	Base class for network models.
