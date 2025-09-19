@@ -14,7 +14,7 @@ import random
 from functions import * 
 from train import train
 from train import test_save
-from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout
+from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LinearLowRank
 from pprint import pprint
 
 from data_utils import augment_data
@@ -102,10 +102,10 @@ def main(
 
 		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = make_tokens(types_chosen, alpha, m, frac_train, letter_to_index, train_test_letters, letter_permutations_class, noise_level)
 
-		# Data augmentation
-		num_augmented = 3
+		# # Data augmentation
+		# num_augmented = 3
 
-		X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = augment_dataset(X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_augmented=num_augmented)
+		# X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test = augment_dataset(X_train, X_test, y_train, y_test, tokens_train, tokens_test, labels_train, labels_test, num_augmented=num_augmented)
 
 		# Train and test network
 		n_batches = len(tokens_train) // batch_size
@@ -116,7 +116,7 @@ def main(
 		if drop_connect != 0.:
 			layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
 		else:
-			layer_type = nn.Linear
+			layer_type = LinearLowRank
 
 		# Create the model
 		if task in ['RNNClass', 'RNNPred']:
@@ -126,7 +126,7 @@ def main(
 				output_size = alpha
 			model = RNN(alpha, n_hidden, n_layers, output_size, 
 			nonlinearity=transfer_func, device=device, 
-			model_filename=model_filename, from_file=from_file,
+			model_filename=model_filename, from_file=from_file, max_rank=max_rank,
 			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type, sim_id=sim_id)
 		
 		elif task == 'RNNAuto':
@@ -270,7 +270,7 @@ if __name__ == "__main__":
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		max_rank=None,
+		max_rank=4,
 		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
@@ -326,7 +326,7 @@ if __name__ == "__main__":
 				[] ]
 		)):
 
-		if sim_idx == 1:
+		if sim_idx > 0:
 			continue
 		
 	
@@ -363,6 +363,7 @@ if __name__ == "__main__":
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
 				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_{sim_idx}"
+				f"max_rank{main_kwargs['max_rank']}"
 			)
 
 			input_folder_name = (
