@@ -121,66 +121,8 @@ class LinearLowRank(nn.Module):
                 else:
                     missing_keys.append(b_key)
 
-class Net(nn.Module):
-    '''
-    Base class for network models.
-    Attribute function `init_weights` is a custom weight initialisation.
-    '''
 
-    def init_weights (self, scaling):
-
-        scaling_arr = scaling.split(",")
-        assert len(scaling_arr) in [1, len(list(self.named_parameters()))], \
-            "The `scaling` parameter must be a string with one of the available options, "+\
-            "or multiple available options comma-separated (as many as the number of layers)"
-
-        for l, (name, pars) in enumerate(self.named_parameters()):
-            if len(scaling_arr) == 1:
-                scaling = scaling_arr[0]
-            else:
-                scaling = scaling_arr[l]
-
-            if "weight" in name:
-                f_in = 1.*pars.data.size()[1]
-                if scaling == "lin":
-                    # initialisation of the weights -- N(0, 1/n)
-                    init_f = lambda f_in: (0., 1./f_in)
-                elif scaling == "lin+":
-                    # initialisation of the weights -- N(0, 1/n)
-                    init_f = lambda f_in: (1./f_in, 1./f_in)
-                elif scaling == "sqrt":
-                    # initialisation of the weights -- N(0, 1/sqrt(n))
-                    init_f = lambda f_in: (0., 1./np.sqrt(f_in))
-                elif scaling == "const":
-                    # initialisation of the weights independent of n
-                    init_f = lambda f_in: (0., 0.001)
-                elif scaling == "const+":
-                    # initialisation of the weights independent of n
-                    init_f = lambda f_in: (0.001, 0.001)
-                elif isinstance(scaling, float) and scaling > 0:
-                    # initialisation of the weights -- N(0, 1/n**alpha)
-                    '''
-                    UNTESTED
-                    '''
-                    init_f = lambda f_in: (0., 1./np.power(f_in, scaling))
-                else:
-                    raise ValueError(
-                        f"Invalid scaling option '{scaling}'\n" + \
-                         "Choose either 'sqrt', 'lin' or a float larger than 0")
-
-                mu, sigma = init_f(f_in)
-                pars.data.normal_(mu, sigma)
-
-    def save(self, filename):
-        torch.save(self.state_dict(), filename)
-
-    def load(self, filename):
-        self.load_state_dict(torch.load(filename, map_location=self.device))
-
-    def __len__ (self):
-        return len(self._modules.items())
-
-class RNN (Net):
+class RNN (nn.Module):
 
     def __init__(self, d_input, d_hidden, num_layers, d_output,
             output_activation=None, # choose btw softmax for classification vs linear for regression tasks
