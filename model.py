@@ -31,96 +31,6 @@ class LinearWeightDropout(nn.Linear):
         return output + self.bias
 
 
-class LinearLowRank(nn.Module):
-    def __init__(self, in_features, out_features, max_rank=None, bias=True):
-        super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.max_rank = max_rank
-
-        if max_rank is None or max_rank >= min(in_features, out_features):
-            # full-rank fallback
-            self.linear = nn.Linear(in_features, out_features, bias=bias)
-            self.use_full = True
-        else:
-            # low-rank parametrization
-            self.U = nn.Parameter(torch.randn(out_features, max_rank)/np.sqrt(max_rank))
-            self.V = nn.Parameter(torch.randn(in_features, max_rank)/np.sqrt(in_features))
-            if bias:
-                self.bias = nn.Parameter(torch.zeros(out_features))
-            else:
-                self.bias = None
-            self.use_full = False
-
-    @property
-    def weight(self):
-        if self.use_full:
-            return self.linear.weight
-        else:
-            return self.U @ self.V.T
-
-    def forward(self, x):
-        if self.use_full:
-            return self.linear(x)
-        else:
-            return F.linear(x, self.weight, self.bias)
-
-    # --- expose "weight" in named_parameters ---
-    def named_parameters(self, prefix='', recurse=True):
-        params = OrderedDict()
-        if self.use_full:
-            # Rename the Linear's params so they appear as weight/bias
-            params[prefix + "weight"] = self.linear.weight
-            if self.linear.bias is not None:
-                params[prefix + "bias"] = self.linear.bias
-        else:
-            # Show U and V separately for optimizer, but also alias weight
-            params[prefix + "U"] = self.U
-            params[prefix + "V"] = self.V
-            if self.bias is not None:
-                params[prefix + "bias"] = self.bias
-            # Also expose a "weight" alias (computed, not a Parameter!)
-            # This won’t be optimized, but it will show up in the list.
-            # Optimizers will still use U, V.
-            params[prefix + "weight"] = self.weight
-        return list(params.items())
-
-    # === integrate with state_dict ===
-    def _save_to_state_dict(self, destination, prefix, keep_vars):
-        if self.use_full:
-            self.linear._save_to_state_dict(destination, prefix, keep_vars)
-        else:
-            w = self.weight if keep_vars else self.weight.detach()
-            destination[prefix + "weight"] = w
-            if self.bias is not None:
-                destination[prefix + "bias"] = self.bias if keep_vars else self.bias.detach()
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata,
-                              strict, missing_keys, unexpected_keys, error_msgs):
-        if self.use_full:
-            self.linear._load_from_state_dict(
-                state_dict, prefix, local_metadata, strict,
-                missing_keys, unexpected_keys, error_msgs)
-        else:
-            w_key = prefix + "weight"
-            b_key = prefix + "bias"
-
-            if w_key in state_dict:
-                weight = state_dict[w_key].to(self.U.device, dtype=self.U.dtype)
-                U_s, S_s, Vh_s = torch.linalg.svd(weight, full_matrices=False)
-                r = self.max_rank
-                U_r, S_r, Vh_r = U_s[:, :r], S_s[:r], Vh_s[:r, :]
-                self.U.data.copy_(U_r @ torch.diag(torch.sqrt(S_r)))
-                self.V.data.copy_(Vh_r.T @ torch.diag(torch.sqrt(S_r)))
-            else:
-                missing_keys.append(w_key)
-
-            if self.bias is not None:
-                if b_key in state_dict:
-                    self.bias.data.copy_(state_dict[b_key].to(self.bias.device, dtype=self.bias.dtype))
-                else:
-                    missing_keys.append(b_key)
-
 class FullRankLinear (nn.Module):
 
     def __init__(self, in_features, out_features, **kwargs):
@@ -267,7 +177,7 @@ class RNN (nn.Module):
             output_activation=None, # choose btw softmax for classification vs linear for regression tasks
             drop_l=None,
             nonlinearity='relu',
-            layer_type=LinearLowRank,
+            layer_type=LowRankLinear,
             max_rank=None,
             init_weights=None,
             model_filename=None, # file with model parameters
