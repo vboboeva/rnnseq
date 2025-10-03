@@ -14,7 +14,7 @@ import random
 from functions import * 
 from train import train
 from train import test_save
-from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LinearLowRank
+from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear
 from pprint import pprint
 
 from data_utils import augment_data
@@ -116,7 +116,7 @@ def main(
 		if drop_connect != 0.:
 			layer_type = partial(LinearWeightDropout, drop_p=drop_connect)
 		else:
-			layer_type = LinearLowRank
+			layer_type = LowRankLinear
 
 		# Create the model
 		if task in ['RNNClass', 'RNNPred']:
