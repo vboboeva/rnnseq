@@ -635,3 +635,196 @@ class RNNMulti (nn.Module):
 
     def __len__ (self):
         return len(self._modules.items())
+
+
+
+if __name__ == "__main__":
+
+    from colorstrings import colorstrings as cs
+
+    def print_parameters (llr):
+        sd = llr.state_dict()
+        for i, (n, p) in enumerate(sd.items()):
+            print(cs.RED + f"{n}" + cs.END)
+            print(80*"-")
+            print(p)
+            if i < len(sd) - 1:
+                print(80*"=")
+        return
+
+    def print_parameters_comp (source, target):
+        assert source.keys() == target.keys(), "Keys mismatch"
+        keys = source.keys()
+        for i, n in enumerate(keys):
+            print(cs.BOLD + cs.RED + f"{n}" + cs.END)
+            print(80*"-")
+            print(cs.BOLD + f"source[{n}]" + cs.END)
+            print(source[n])
+            print(cs.BOLD + f"target[{n}]" + cs.END)
+            print(target[n])
+            if i < len(keys) - 1:
+                print(80*"=")
+        return
+
+    def state_dicts_equal (source, target):
+        '''
+        \"Equal\" is not quite an equality.
+
+        We check that for the parameters that are not None in `target`
+        the values are actually the same as in the `source`.
+        '''
+        assert source.keys() == target.keys(), "Keys mismatch"
+
+        for (k1, v1), (k2, v2) in zip(source.items(), target.items()):
+            if (k1 != k2):
+                return False
+            if isinstance(v2, torch.Tensor):
+                if (isinstance(v1, torch.Tensor) and not torch.equal(v1, v2)) or (v1 is None) :
+                    return False
+        return True
+
+
+    in_features = 6
+    out_features = 4
+
+
+    ### Tests
+    
+    ## Full-rank to full-rank (compatible)
+
+    # 1. Full -> Full
+    test_txt = "TESTING: Full -> Full"
+    print(cs.BOLD + f"\n\n1. {test_txt}" + cs.END)
+    old = FullRankLinear(in_features, out_features, bias=True)
+    old_state_dict = old.state_dict()
+    new = FullRankLinear(in_features, out_features, bias=True)
+    new.load_state_dict(old_state_dict)
+    print_parameters_comp(old.state_dict(), new.state_dict())
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    # 2. Full -> Low(None)
+    test_txt = "TESTING: Full -> Low(None)"
+    print(cs.BOLD + f"\n\n2. {test_txt}" + cs.END)
+    old = FullRankLinear(in_features, out_features, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
+    new.load_state_dict(old_state_dict)
+    print_parameters_comp(old.state_dict(), new.state_dict())
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    # 3. Low(None) -> Full
+    test_txt = "TESTING: Low(None) -> Full"
+    print(cs.BOLD + f"\n\n3. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
+    old_state_dict = old.state_dict()
+    new = FullRankLinear(in_features, out_features, bias=True)
+    new.load_state_dict(old_state_dict)
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+    
+    ## Low-rank to full-rank (compatible) -- the weight matrix can be loaded
+
+    # 4. Low(int) -> Full
+    test_txt = "TESTING: Low(int) -> Full"
+    print(cs.BOLD + f"\n\n4. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    old_state_dict = old.state_dict()
+    new = FullRankLinear(in_features, out_features, bias=True)
+    new.load_state_dict(old_state_dict)
+    print_parameters_comp(old.state_dict(), new.state_dict())
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    # 5. Low(int) -> Low(None)
+    test_txt = "TESTING: Low(int) -> Low(None)"
+    print(cs.BOLD + f"\n\n5. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
+    new.load_state_dict(old_state_dict)
+    print_parameters_comp(old.state_dict(), new.state_dict())
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    ## Full-rank to low-rank (incompatible) -- error should be raised
+
+    # 6. Full -> Low(int)
+    test_txt = "TESTING: Full -> Low(int)"
+    print(cs.BOLD + f"\n\n6. {test_txt}" + cs.END)
+    old = FullRankLinear(in_features, out_features, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    passed = False
+    try:
+        new.load_state_dict(old_state_dict)
+    except Exception as e:
+        print(f"\"{type(e).__name__}\" exception raised: {e}")
+        passed = True
+    if not passed:
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    
+    # 7. Low(None) -> Low(int)
+    test_txt = "TESTING: Low(None) -> Low(int)"
+    print(cs.BOLD + f"\n\n7. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    passed = False
+    try:
+        new.load_state_dict(old_state_dict)
+    except Exception as e:
+        print(f"\"{type(e).__name__}\" exception raised: {e}")
+        passed = True
+    if not passed:
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+
+    ## Low-rank to low-rank (compatible) -- loading U/V should work
+
+    # 8. Low(int) -> Low(int)
+    test_txt = "TESTING: Low(int) -> Low(int)"
+    print(cs.BOLD + f"\n\n8. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    new.load_state_dict(old_state_dict)
+    print_parameters_comp(old.state_dict(), new.state_dict())
+    if not state_dicts_equal(old_state_dict, new.state_dict()):
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
+    
+    ## Low-rank to low-rank (incompatible) -- if different max_rank, error should be raised
+
+    # 9. Low(int) -> Low(int2)
+    test_txt = "TESTING: Low(int) -> Low(int2)"
+    print(cs.BOLD + f"\n\n9. {test_txt}" + cs.END)
+    old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
+    old_state_dict = old.state_dict()
+    new = LowRankLinear(in_features, out_features, max_rank=3, bias=True)
+    passed = False
+    try:
+        new.load_state_dict(old_state_dict)
+    except Exception as e:
+        print(f"\"{type(e).__name__}\" exception raised: {e}")
+        passed = True
+    if not passed:
+        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
+    else:
+        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
