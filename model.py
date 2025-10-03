@@ -121,6 +121,145 @@ class LinearLowRank(nn.Module):
                 else:
                     missing_keys.append(b_key)
 
+class FullRankLinear (nn.Module):
+
+    def __init__(self, in_features, out_features, **kwargs):
+        bias = kwargs.pop('bias', True)
+        super().__init__(**kwargs)
+        self._weight = nn.Parameter(torch.randn(out_features, in_features) / np.sqrt(in_features))
+        if bias:
+            self.bias = nn.Parameter(torch.randn(out_features))
+        else:
+            self.bias = None
+
+    @property
+    def weight (self):
+        return self._weight
+
+    def state_dict(self, *args, **kwargs):
+        state = OrderedDict()
+        state['U'] = None
+        state['V'] = None
+        state['weight'] = self.weight
+        if self.bias is not None:
+            state['bias'] = self.bias
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+
+        # '_weight' parameter is saved as 'weight'
+        weight_key = prefix + 'weight'
+        if weight_key in state_dict:
+            # Load the weight (either full-rank weight or reconstructed weight)
+            self._weight.data.copy_(state_dict[weight_key])
+            state_dict.pop(weight_key)
+
+        bias_key = prefix + 'bias'
+        if self.bias is not None and bias_key in state_dict:
+            self.bias.data.copy_(state_dict[bias_key])
+            state_dict.pop(bias_key)
+        elif self.bias is None and bias_key in state_dict:
+            unexpected_keys.append(bias_key)
+
+        # 'U' and 'V' keys are required for consistency with LowRankLinear,
+        # but the state_dict of a FullRankLinear module has U/V set as None.
+        # If the source state_dict has U/V keys, pop them -- they are ignored
+        state_dict.pop(prefix + 'U')
+        state_dict.pop(prefix + 'V')
+
+        pass
+
+class LowRankLinear (FullRankLinear):
+
+    def __init__(self, in_features, out_features, max_rank=None, **kwargs):
+
+        # We must call super().__init__ which initializes self._weight and self.bias
+        # and registers them as parameters.
+        super().__init__(in_features, out_features, **kwargs)
+
+        if (max_rank is None) or (max_rank > min(in_features, out_features)):
+            self.full_rank = True
+            # The parameters already exist from super().__init__
+            return
+
+        else:
+            self.full_rank = False
+
+            # Remove the full-rank parameter initialized in super().__init__
+            # and initialize low-rank factors instead
+            del self._weight
+            self.U = nn.Parameter(torch.randn(out_features, max_rank) / np.sqrt(max_rank))
+            self.V = nn.Parameter(torch.randn(max_rank, in_features) / np.sqrt(in_features))
+
+    @property
+    def weight (self):
+        if self.full_rank:
+            return self._weight
+        else:
+            return self.U @ self.V
+
+    def state_dict(self, *args, **kwargs):
+        # The base implementation of FullRankLinear gets 'weight' and 'bias'
+        state = super().state_dict(*args, **kwargs)
+
+        if not self.full_rank:
+            state['U'] = self.U
+            state['V'] = self.V
+
+        # 'weight' remains the reconstructed/full matrix
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+
+        weight_key = prefix + 'weight'
+        u_key = prefix + 'U'
+        v_key = prefix + 'V'
+
+        # Case 1: Loading into a Full-Rank LowRankLinear (i.e., max_rank=None)
+        if self.full_rank:
+            # FullRankLinear's load logic handles loading 'weight' into self._weight.
+            # It also correctly ignores U/V keys if they contain Tensors from a LowRank state.
+            return super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
+        # Case 2: Loading into a Low-Rank LowRankLinear (self.full_rank=False)
+        else:
+            # This module MUST have U/V factors in the state_dict as Tensors.
+
+            u_in_state = u_key in state_dict and state_dict[u_key] is not None
+            v_in_state = v_key in state_dict and state_dict[v_key] is not None
+
+            if u_in_state and v_in_state:
+                # Load U and V factors
+                self.U.data.copy_(state_dict[u_key])
+                self.V.data.copy_(state_dict[v_key])
+
+                # Check for rank mismatch
+                if self.U.shape[1] != state_dict[u_key].shape[1]:
+                    error_msgs.append(f'Size mismatch for {u_key}: expected size {list(self.U.shape)} but got {list(state_dict[u_key].shape)}.')
+
+                # Pop loaded keys
+                state_dict.pop(u_key)
+                state_dict.pop(v_key)
+
+            else:
+                # State is missing U/V Tensors (e.g., loaded from a FullRankLinear). Report as missing.
+                if not u_in_state: missing_keys.append(u_key)
+                if not v_in_state: missing_keys.append(v_key)
+
+            # Pop 'weight' (reconstructed matrix)
+            if weight_key in state_dict:
+                state_dict.pop(weight_key)
+
+            # Handle bias
+            bias_key = prefix + 'bias'
+            if self.bias is not None and bias_key in state_dict:
+                self.bias.data.copy_(state_dict[bias_key])
+                state_dict.pop(bias_key)
+            elif self.bias is None and bias_key in state_dict:
+                unexpected_keys.append(bias_key)
+
+            return
+
 
 class RNN (nn.Module):
 
