@@ -11,8 +11,9 @@ from collections import OrderedDict
 ############################################################################
 
 def freeze(module):
-    for name, pars in module.named_parameters():
-        pars.requires_grad = False
+    for name, pars in module.state_dict().items():
+        if pars is not None:
+            pars.requires_grad = False
 
 
 class LinearWeightDropout(nn.Linear):
@@ -208,19 +209,19 @@ class RNN (nn.Module):
         if 'i2h' in to_freeze:
             freeze(self.i2h)
         if 'i2h' in from_file:
-            self._from_file += ['i2h.'+n for n,_ in self.i2h.named_parameters()]
+            self._from_file += ['i2h.'+n for n,_ in self.i2h.state_dict().items()]
 
         self.h2h = layer_type(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
         if 'h2h' in to_freeze:
             freeze(self.h2h)
         if 'h2h' in from_file:
-            self._from_file += ['h2h.'+n for n,_ in self.h2h.named_parameters()]
+            self._from_file += ['h2h.'+n for n,_ in self.h2h.state_dict().items()]
 
         self.h2o = layer_type(d_hidden, d_output, bias=bias)
         if 'h2o' in to_freeze:
             freeze(self.h2o)
         if 'h2o' in from_file:
-            self._from_file += ['h2o.'+n for n,_ in self.h2o.named_parameters()]
+            self._from_file += ['h2o.'+n for n,_ in self.h2o.state_dict().items()]
 
         if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
