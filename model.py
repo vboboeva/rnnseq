@@ -46,6 +46,9 @@ class FullRankLinear (nn.Module):
     def weight (self):
         return self._weight
 
+    def forward(self, input):
+        return F.linear(input, self.weight, self.bias)
+
     def state_dict(self, *args, **kwargs):
         state = OrderedDict()
         state['U'] = None
