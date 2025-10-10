@@ -30,6 +30,7 @@ def main(
 	n_latent=7,
 	m = 2,
 	task=None,
+	k_steps=1,		# only used for task='RNNPred'
 	objective='CE',
 	from_file = [], 
 	to_freeze = [],
@@ -124,19 +125,21 @@ def main(
 				output_size = num_classes
 			else:
 				output_size = alpha
-			model = RNN(alpha, n_hidden, n_layers, output_size, 
-			nonlinearity=transfer_func, device=device, 
-			model_filename=model_filename, from_file=from_file, max_rank=max_rank,
-			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type, sim_id=sim_id)
+			model = RNN(alpha, n_hidden, n_layers, output_size,
+						nonlinearity=transfer_func, device=device,
+						model_filename=model_filename, from_file=from_file, max_rank=max_rank,
+						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type, sim_id=sim_id)
 		
 		elif task == 'RNNAuto':
 			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L+cue_size,
-			nonlinearity=transfer_func, device=device, 
-			model_filename=model_filename, from_file=from_file,
-			to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+						nonlinearity=transfer_func, device=device,
+						model_filename=model_filename, from_file=from_file,
+						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 		
 		elif task == 'RNNMulti':
-			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L+cue_size, device=device, model_filename=model_filename, from_file=from_file, to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L+cue_size,
+						device=device, model_filename=model_filename, from_file=from_file,
+						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
 
 		else:
 			raise ValueError(f"Model not recognized: {task}")
@@ -176,7 +179,8 @@ def main(
 					print('\n')
 
 			try:
-				train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task=task, weight_decay=weight_decay, delay=delay)
+				train(X_train, y_train, model, optimizer, objective, n_batches, batch_size,
+					task=task, k_steps=k_steps, weight_decay=weight_decay, delay=delay)
 			except Exception as e:
 				print(f"{type(e).__name__}: {e}.\nSkipping training step.")
 
@@ -266,7 +270,8 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti' 
+		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
+		k_steps=2,	# number of steps for the k-steps rollout (prediction only)
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
