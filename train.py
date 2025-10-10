@@ -73,6 +73,51 @@ def predict_k_steps_rollout (model, hidden, k_steps):
 	return pred_tokens, torch.stack(logits)
 
 
+def compute_k_steps_rollout_loss (model, X_input, X_target, k_steps=3,
+								loss_function=F.cross_entropy, **loss_kwargs
+								):
+	'''
+	Compute the k-steps roll-out loss over a batch of sequences.
+
+	Parameters:
+	----------
+
+	model: RNN
+		RNN model
+
+	X_input: torch.Tensor
+		input token sequence (labels)
+
+	X_target: torch.Tensor
+		target token sequence (labels)
+
+	k_steps: int (optional; default: 3)
+
+	loss_function: callable (optional; default: torch.nn.functional.cross_entropy)
+		Function that takes predicted logits and target token labels as inputs
+		and returns the loss (tensor).
+
+	Returns:
+	-------
+
+	loss: torch.Tensor
+		Mean loss over batches, real time and roll-out time
+	'''
+
+	hidden, _ = model.forward(X_input)
+
+	loss = 0
+	for t, h_t in enumerate(hidden[:-k_steps]):
+
+		# 1. compute the logits for the next k steps (using roll-out samples of tokens)
+		_, rollout_logits = predict_k_steps_rollout(model, h_t, k_steps)
+
+		# 2. compute the loss against the target tokens (input)
+		target_tokens = X_target[t:t+k_steps]
+		loss += loss_function(rollout_logits, target_tokens, **loss_kwargs) / k_steps / (len(X_input) - k_steps + 1)
+
+	return loss
+
 
 ##########################################
 # 			train network 				 #
