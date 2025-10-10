@@ -123,13 +123,19 @@ def compute_k_steps_rollout_loss (model, X_input, X_target, k_steps=3,
 # 			train network 				 #
 ##########################################
 
-def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_decay=0., delay=0):
+def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_decay=0., delay=0, k_steps=1):
 	
 	optimizer.zero_grad()
 
 	if task == 'RNNPred':
-		ht, out_batch = model.forward(X_batch)
-		loss = loss_function(out_batch[:-1], X_batch[1:])
+		if k_steps == 1:
+			ht, out_batch = model.forward(X_batch)
+			loss = loss_function(out_batch[:-1], X_batch[1:])
+		elif (k_steps > 0) and (k_steps < len(X_batch)):
+			loss = compute_k_steps_rollout_loss(model, X_batch[:-1], X_batch[1:],
+								k_steps=k_steps, loss_function=loss_function)
+		else:
+			raise ValueError(f"Invalid value for `k_steps` ({k_steps}). This must be a positive integer smaller than the target sequence length")
 	
 	elif task == 'RNNClass':
 		ht, out_batch = model.forward(X_batch, delay=delay)
@@ -149,7 +155,9 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	optimizer.step()
 	return
 
-def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task, weight_decay=0., delay=0):
+def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, task,
+		weight_decay=0., delay=0, k_steps=1
+		):
 
 	if task in ['RNNPred', 'RNNClass', 'RNNAuto']:
 		task_list = n_batches*[task]
@@ -176,7 +184,9 @@ def train(X_train, y_train, model, optimizer, objective, n_batches, batch_size, 
 		if hasattr(model, 'set_task'):
 			model.set_task(_task)
 
-		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task, weight_decay=weight_decay, delay=delay)
+		train_batch(X_batch, y_batch, model, optimizer, loss_functions[_task][objective], _task,
+					weight_decay=weight_decay, delay=delay, k_steps=k_steps
+					)
 
 	return
 
