@@ -306,6 +306,9 @@ class RNN (nn.Module):
         zh = self.h2h (h)
         return self.phi (zh + zi)
 
+    def step (self, h, x):
+        return self.__hidden_update(h,x)
+
     def forward(self, x, mask=None, delay=0):
         '''
         x
