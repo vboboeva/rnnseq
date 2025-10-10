@@ -22,6 +22,58 @@ loss_functions = {
 	}
 }
 
+
+def predict_k_steps_rollout (model, hidden, k_steps):
+	'''
+	Perform the k-steps roll-out prediction.
+
+	Parameters:
+	----------
+
+	model: RNN
+		RNN model
+
+	hidden: torch.Tensor
+		Initial RNN state for the prediction
+
+	k_steps: int
+		Number or steps for the roll-out
+
+	Returns:
+	-------
+	
+	pred_tokens: torch.Tensor
+		One-hot encoding of the predicted tokens
+
+	logits: torch.Tensor
+		Corresponding logits
+	'''
+
+	logits = []
+	pred_tokens = []
+	for _ in range(k_steps):
+
+		# 1. Compute the next-token logits
+		#    These will have to be returned
+		output = model.h2o(hidden)
+		logits.append(output)
+
+		# 2. Sample the next token
+		next_token = F.one_hot(
+						torch.multinomial(output.softmax(dim=-1), 1).view(-1),
+						num_classes=model.d_input
+					 )
+		pred_tokens.append(next_token)
+
+		# 3. Update the state according to the prediction
+		hidden = model.step(hidden, next_token.type(torch.float32))
+
+	pred_tokens = torch.stack(pred_tokens)
+
+	return pred_tokens, torch.stack(logits)
+
+
+
 ##########################################
 # 			train network 				 #
 ##########################################
