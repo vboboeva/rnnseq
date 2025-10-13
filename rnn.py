@@ -14,7 +14,8 @@ import random
 from functions import * 
 from train import train
 from train import test_save
-from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear
+from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear,
+				print_parameters, print_parameters_comp, state_dicts_equal
 from pprint import pprint
 
 from data_utils import augment_data
@@ -270,18 +271,18 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
-		k_steps=2,	# number of steps for the k-steps rollout (prediction only)
+		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
+		k_steps=1,	# number of steps for the k-steps rollout (prediction only)
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		max_rank=4,
+		max_rank=None,
 		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
 		n_epochs = 50, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 1., # fraction of dataset to train on
+		frac_train = 0.8, # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 10, # size of alphabet
 		snap_freq = 1, # snapshot of net activity every snap_freq epochs
@@ -363,7 +364,8 @@ if __name__ == "__main__":
 			np.random.seed(1990+split_id)
 
 			output_folder_name = (
-				f"test_avg/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"test_rollout/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"kSteps{main_kwargs['k_steps']}"
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
