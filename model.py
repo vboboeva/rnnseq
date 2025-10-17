@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
+from colorstrings import colorstrings as cs
 
 ############################################################################
 
@@ -14,6 +15,48 @@ def freeze(module):
     for name, pars in module.state_dict().items():
         if pars is not None:
             pars.requires_grad = False
+
+def print_parameters (llr):
+    sd = llr.state_dict()
+    for i, (n, p) in enumerate(sd.items()):
+        print(cs.RED + f"{n}" + cs.END)
+        print(80*"-")
+        print(p)
+        if i < len(sd) - 1:
+            print(80*"=")
+    return
+
+def print_parameters_comp (source, target):
+    assert source.keys() == target.keys(), "Keys mismatch"
+    keys = source.keys()
+    for i, n in enumerate(keys):
+        print(cs.BOLD + cs.RED + f"{n}" + cs.END)
+        print(80*"-")
+        print(cs.BOLD + f"source[{n}]" + cs.END)
+        print(source[n])
+        print(cs.BOLD + f"target[{n}]" + cs.END)
+        print(target[n])
+        if i < len(keys) - 1:
+            print(80*"=")
+    return
+
+def state_dicts_equal (source, target):
+    '''
+    \"Equal\" is not quite an equality.
+
+    We check that for the parameters that are not None in `target`
+    the values are actually the same as in the `source`.
+    '''
+    assert source.keys() == target.keys(), "Keys mismatch"
+
+    for (k1, v1), (k2, v2) in zip(source.items(), target.items()):
+        if (k1 != k2):
+            return False
+        if isinstance(v2, torch.Tensor):
+            if (isinstance(v1, torch.Tensor) and not torch.equal(v1, v2)) or (v1 is None) :
+                return False
+    return True
+
 
 
 class LinearWeightDropout(nn.Linear):
@@ -306,6 +349,9 @@ class RNN (nn.Module):
         zh = self.h2h (h)
         return self.phi (zh + zi)
 
+    def step (self, h, x):
+        return self.__hidden_update(h,x)
+
     def forward(self, x, mask=None, delay=0):
         '''
         x
@@ -553,49 +599,6 @@ class RNNMulti (nn.Module):
 
 
 if __name__ == "__main__":
-
-    from colorstrings import colorstrings as cs
-
-    def print_parameters (llr):
-        sd = llr.state_dict()
-        for i, (n, p) in enumerate(sd.items()):
-            print(cs.RED + f"{n}" + cs.END)
-            print(80*"-")
-            print(p)
-            if i < len(sd) - 1:
-                print(80*"=")
-        return
-
-    def print_parameters_comp (source, target):
-        assert source.keys() == target.keys(), "Keys mismatch"
-        keys = source.keys()
-        for i, n in enumerate(keys):
-            print(cs.BOLD + cs.RED + f"{n}" + cs.END)
-            print(80*"-")
-            print(cs.BOLD + f"source[{n}]" + cs.END)
-            print(source[n])
-            print(cs.BOLD + f"target[{n}]" + cs.END)
-            print(target[n])
-            if i < len(keys) - 1:
-                print(80*"=")
-        return
-
-    def state_dicts_equal (source, target):
-        '''
-        \"Equal\" is not quite an equality.
-
-        We check that for the parameters that are not None in `target`
-        the values are actually the same as in the `source`.
-        '''
-        assert source.keys() == target.keys(), "Keys mismatch"
-
-        for (k1, v1), (k2, v2) in zip(source.items(), target.items()):
-            if (k1 != k2):
-                return False
-            if isinstance(v2, torch.Tensor):
-                if (isinstance(v1, torch.Tensor) and not torch.equal(v1, v2)) or (v1 is None) :
-                    return False
-        return True
 
 
     in_features = 6
