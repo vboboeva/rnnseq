@@ -6,13 +6,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
 from colorstrings import colorstrings as cs
+from collections import OrderedDict, namedtuple
+
+# Use PyTorch's internal namedtuple for custom load_state_dict results
+LoadStateDictResult = namedtuple('LoadStateDictResult', ['missing_keys', 'unexpected_keys'])
 
 ############################################################################
 
 def freeze(module):
-    for name, pars in module.state_dict().items():
+    for name, pars in module.named_parameters():
         if pars is not None:
             pars.requires_grad = False
 
@@ -204,7 +207,6 @@ class RNN (nn.Module):
         super(RNN, self).__init__()
         init=init_weights
         print('sim_id', sim_id)
-        self._from_file = []
         self._model_filename=model_filename
 
         self.device = device
@@ -213,26 +215,14 @@ class RNN (nn.Module):
         self.d_output = d_output
         self.d_hidden = d_hidden
 
-        self.i2h = layer_type(d_input, d_hidden, bias=0)
-        if 'i2h' in to_freeze:
-            freeze(self.i2h)
-        if 'i2h' in from_file:
-            self._from_file += ['i2h.'+n for n,_ in self.i2h.state_dict().items()]
+        self.i2h = nn.Linear(d_input, d_hidden, bias=0)
 
         if layer_type == LowRankLinear:
             self.h2h = LowRankLinear(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
         else:
             self.h2h = layer_type(d_hidden, d_hidden, bias=bias)
-        if 'h2h' in to_freeze:
-            freeze(self.h2h)
-        if 'h2h' in from_file:
-            self._from_file += ['h2h.'+n for n,_ in self.h2h.state_dict().items()]
 
-        self.h2o = layer_type(d_hidden, d_output, bias=bias)
-        if 'h2o' in to_freeze:
-            freeze(self.h2o)
-        if 'h2o' in from_file:
-            self._from_file += ['h2o.'+n for n,_ in self.h2o.state_dict().items()]
+        self.h2o = nn.Linear(d_hidden, d_output, bias=bias)
 
         if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
@@ -263,16 +253,66 @@ class RNN (nn.Module):
 
         self.initialize_weights(init, seed=sim_id)
 
+        if len(from_file):
+            self.load_state_dict(torch.load(self._model_filename), modules_to_load=from_file)
+
+        if 'i2h' in to_freeze:
+            freeze(self.i2h)
+        if 'h2h' in to_freeze:
+            freeze(self.h2h)
+        if 'h2o' in to_freeze:
+            freeze(self.h2o)
+
+        # print("print_parameters(self.i2h)")
+        # print_parameters(self.i2h)
+        # print("print_parameters(self.h2h)")
+        # print_parameters(self.h2h)
+        # print("print_parameters(self.h2o)")
+        # print_parameters(self.h2o)
+
+    def load_state_dict(self, state_dict, strict=True, modules_to_load=None):
+        """
+        Custom load_state_dict that optionally filters the keys to load only a subset of sub-modules.
+        
+        :param state_dict: The state dictionary to load.
+        :param strict: Whether to check if all keys in state_dict match all keys in the module.
+        :param modules_to_load: A list of module names (strings, e.g., ['layer1']) to load. 
+                                If None, all modules are loaded (default behavior).
+        """
+        if modules_to_load is not None:
+            # Build a set of prefixes (e.g., 'layer1.', 'layer2.')
+            prefixes = tuple(f'{name}.' for name in modules_to_load)
+            
+            # Filter the incoming state_dict
+            filtered_state_dict = {}
+            missing_keys_due_to_filter = []
+            
+            for k, v in state_dict.items():
+                if k.startswith(prefixes):
+                    filtered_state_dict[k] = v
+                else:
+                    # Keep track of keys we ignored because they weren't in the list
+                    missing_keys_due_to_filter.append(k)
+
+            print(f"\n[Parent Load] Loading only modules: {modules_to_load}. Filtered keys: {list(filtered_state_dict.keys())}")
+            
+            # Load the filtered state dict using the standard recursive process
+            # We set strict=False here because we have intentionally removed keys
+            result = super().load_state_dict(filtered_state_dict, strict=False)
+
+            # The keys we removed are now 'missing' from the load operation.
+            # We must re-add them to the 'unexpected' list of the final result, 
+            # as they were present in the input but intentionally ignored.
+            final_unexpected_keys = result.unexpected_keys + missing_keys_due_to_filter
+            return LoadStateDictResult(result.missing_keys, final_unexpected_keys)
+
+        else:
+            # Default behavior: load everything
+            return super().load_state_dict(state_dict, strict=strict)
+
 
     def initialize_weights(self, init, seed=None):
         print('init', init)
-        
-        _pars_dict = {}
-        if self._model_filename is not None:
-            # The parameters to be set from file are removed from the list of
-            # parameters to which the initialisation rule is applied
-            print(f"Loading parameters from file '{self._model_filename}'")
-            _pars_dict = torch.load(self._model_filename)
 
         if seed is not None:
             torch.manual_seed(1990+seed)
@@ -293,19 +333,11 @@ class RNN (nn.Module):
                 f"Invalid init option '{init}'\n" + \
                  "Choose either None, 'Rich', 'Lazy' or 'Const'")
         
-        for name, pars in self.state_dict().items():
-            if name in self._from_file:
-                pars.data = _pars_dict[name]
-            elif init is not None:
-                if "weight" in name:
-                    f_in = 1.*pars.data.size()[1]
-                    std = init_f(f_in)
-                    pars.data.normal_(0., std)
-        # # check
-        # for name, pars in self.named_parameters():
-        #     print(name, "\t", torch.max(pars - _pars_dict[name]))
-        # exit()
-        # # end check
+        if init is not None:
+            if "weight" in name:
+                f_in = 1.*pars.data.size()[1]
+                std = init_f(f_in)
+                pars.data.normal_(0., std)
 
     def __hidden_update (self, h, x):
         '''
