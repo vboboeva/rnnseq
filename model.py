@@ -254,7 +254,10 @@ class RNN (nn.Module):
         if 'i2h' in from_file:
             self._from_file += ['i2h.'+n for n,_ in self.i2h.state_dict().items()]
 
-        self.h2h = layer_type(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
+        if layer_type == LowRankLinear:
+            self.h2h = LowRankLinear(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
+        else:
+            self.h2h = layer_type(d_hidden, d_hidden, bias=bias)
         if 'h2h' in to_freeze:
             freeze(self.h2h)
         if 'h2h' in from_file:
@@ -325,7 +328,7 @@ class RNN (nn.Module):
                 f"Invalid init option '{init}'\n" + \
                  "Choose either None, 'Rich', 'Lazy' or 'Const'")
         
-        for name, pars in self.named_parameters():
+        for name, pars in self.state_dict().items():
             if name in self._from_file:
                 pars.data = _pars_dict[name]
             elif init is not None:
@@ -599,7 +602,6 @@ class RNNMulti (nn.Module):
 
 
 if __name__ == "__main__":
-
 
     in_features = 6
     out_features = 4
