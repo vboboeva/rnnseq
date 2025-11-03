@@ -6,13 +6,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
 from colorstrings import colorstrings as cs
+from collections import OrderedDict, namedtuple
+
+# Use PyTorch's internal namedtuple for custom load_state_dict results
+LoadStateDictResult = namedtuple('LoadStateDictResult', ['missing_keys', 'unexpected_keys'])
 
 ############################################################################
 
 def freeze(module):
-    for name, pars in module.state_dict().items():
+    for name, pars in module.named_parameters():
         if pars is not None:
             pars.requires_grad = False
 
@@ -27,17 +30,41 @@ def print_parameters (llr):
     return
 
 def print_parameters_comp (source, target):
-    assert source.keys() == target.keys(), "Keys mismatch"
-    keys = source.keys()
-    for i, n in enumerate(keys):
-        print(cs.BOLD + cs.RED + f"{n}" + cs.END)
-        print(80*"-")
-        print(cs.BOLD + f"source[{n}]" + cs.END)
-        print(source[n])
-        print(cs.BOLD + f"target[{n}]" + cs.END)
-        print(target[n])
-        if i < len(keys) - 1:
-            print(80*"=")
+
+    src_keys = source.keys()
+    tgt_keys = target.keys()
+    common_keys = list(set(src_keys).intersection(set(tgt_keys)))
+    tgt_missed_keys = list(set(src_keys) - set(tgt_keys))
+    src_missed_keys = list(set(tgt_keys) - set(src_keys))
+    if len(common_keys):
+        print(cs.BOLD + cs.RED, "Common keys", cs.END)
+        for i, n in enumerate(common_keys):
+            print(cs.BOLD + cs.CYAN + f"{n}" + cs.END)
+            print(80*"-")
+            print(cs.BOLD + f"source[{n}]" + cs.END)
+            print(source[n])
+            print(cs.BOLD + f"target[{n}]" + cs.END)
+            print(target[n])
+            if i < len(common_keys) - 1:
+                print(80*"=")
+    if len(tgt_missed_keys):
+        print(cs.BOLD + cs.RED, "Keys missing in target", cs.END)
+        for i, n in enumerate(tgt_missed_keys):
+            print(cs.BOLD + cs.CYAN + f"{n}" + cs.END)
+            print(80*"-")
+            print(cs.BOLD + f"source[{n}]" + cs.END)
+            print(source[n])
+            if i < len(tgt_missed_keys) - 1:
+                print(80*"=")
+    if len(src_missed_keys):
+        print(cs.BOLD + cs.RED, "Keys missing in source", cs.END)
+        for i, n in enumerate(tgt_missed_keys):
+            print(cs.BOLD + cs.CYAN + f"{n}" + cs.END)
+            print(80*"-")
+            print(cs.BOLD + f"target[{n}]" + cs.END)
+            print(target[n])
+            if i < len(src_missed_keys) - 1:
+                print(80*"=")
     return
 
 def state_dicts_equal (source, target):
@@ -47,11 +74,13 @@ def state_dicts_equal (source, target):
     We check that for the parameters that are not None in `target`
     the values are actually the same as in the `source`.
     '''
-    assert source.keys() == target.keys(), "Keys mismatch"
+    src_keys = source.keys()
+    tgt_keys = target.keys()
+    common_keys = list(set(src_keys).intersection(set(tgt_keys)))
 
-    for (k1, v1), (k2, v2) in zip(source.items(), target.items()):
-        if (k1 != k2):
-            return False
+    for k in common_keys:
+        v1 = source[k]
+        v2 = target[k]
         if isinstance(v2, torch.Tensor):
             if (isinstance(v1, torch.Tensor) and not torch.equal(v1, v2)) or (v1 is None) :
                 return False
@@ -74,148 +103,87 @@ class LinearWeightDropout(nn.Linear):
             return output
         return output + self.bias
 
+class FullRankLinear(nn.Linear):
+    max_rank = None
 
-class FullRankLinear (nn.Module):
+class LowRankLinear(FullRankLinear):
+    def __init__(self, in_features, out_features, bias=True, max_rank=None, device=None, dtype=None):
+        super().__init__(in_features, out_features, bias=bias, device=device, dtype=dtype)
 
-    def __init__(self, in_features, out_features, **kwargs):
-        bias = kwargs.pop('bias', True)
-        super().__init__(**kwargs)
-        self._weight = nn.Parameter(torch.randn(out_features, in_features) / np.sqrt(in_features))
-        if bias:
-            self.bias = nn.Parameter(torch.randn(out_features))
+        self.max_rank = max_rank
+
+        if max_rank is not None and max_rank < min(in_features, out_features):
+            self.low_rank = True
+            del self.weight
+            if self.bias is not None:
+                del self.bias
+            self.U = nn.Parameter(torch.empty(max_rank, in_features, device=device, dtype=dtype))
+            self.V = nn.Parameter(torch.empty(out_features, max_rank, device=device, dtype=dtype))
+            self.bias = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype))
+            self.reset_parameters()
         else:
-            self.bias = None
+            self.low_rank = False
+            self.U = None
+            self.V = None
+
+        for p in self.parameters():
+            if p is not None:
+                p.requires_grad_(True)
+
+    def reset_parameters(self):
+        if self.max_rank is None or self.max_rank >= min(self.in_features, self.out_features):
+            super().reset_parameters()
+        else:
+            k = 1 / np.sqrt(self.in_features)
+            nn.init.uniform_(self.U, -k, k)
+            nn.init.uniform_(self.V, -k, k)
+            if self.bias is not None:
+                nn.init.uniform_(self.bias, -k, k)
 
     @property
-    def weight (self):
-        return self._weight
+    def weight(self):
+        if self.max_rank is None or self.max_rank >= min(self.in_features, self.out_features):
+            return super().weight
+        else:
+            return self.V @ self.U
 
-    def forward(self, input):
-        return F.linear(input, self.weight, self.bias)
+    def forward(self, x):
+        return nn.functional.linear(x, self.weight, self.bias)
+
+    def _extra_state_keys(self):
+        return ['max_rank']
 
     def state_dict(self, *args, **kwargs):
-        state = OrderedDict()
-        state['U'] = None
-        state['V'] = None
-        state['weight'] = self.weight
-        if self.bias is not None:
-            state['bias'] = self.bias
-        return state
+        sd = super().state_dict(*args, **kwargs)
+        if self.low_rank:
+            sd['weight'] = self.weight.detach()
+            sd['U'] = self.U.detach()
+            sd['V'] = self.V.detach()
+        return sd
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-
-        # '_weight' parameter is saved as 'weight'
-        weight_key = prefix + 'weight'
-        if weight_key in state_dict:
-            # Load the weight (either full-rank weight or reconstructed weight)
-            self._weight.data.copy_(state_dict[weight_key])
-            state_dict.pop(weight_key)
-
-        bias_key = prefix + 'bias'
-        if self.bias is not None and bias_key in state_dict:
-            self.bias.data.copy_(state_dict[bias_key])
-            state_dict.pop(bias_key)
-        elif self.bias is None and bias_key in state_dict:
-            unexpected_keys.append(bias_key)
-
-        # 'U' and 'V' keys are required for consistency with LowRankLinear,
-        # but the state_dict of a FullRankLinear module has U/V set as None.
-        # If the source state_dict has U/V keys, pop them -- they are ignored
-        state_dict.pop(prefix + 'U')
-        state_dict.pop(prefix + 'V')
-
-        pass
-
-class LowRankLinear (FullRankLinear):
-
-    def __init__(self, in_features, out_features, max_rank=None, **kwargs):
-
-        # We must call super().__init__ which initializes self._weight and self.bias
-        # and registers them as parameters.
-        super().__init__(in_features, out_features, **kwargs)
-
-        if (max_rank is None) or (max_rank > min(in_features, out_features)):
-            self.full_rank = True
-            # The parameters already exist from super().__init__
-            return
-
-        else:
-            self.full_rank = False
-
-            # Remove the full-rank parameter initialized in super().__init__
-            # and initialize low-rank factors instead
-            del self._weight
-            self.U = nn.Parameter(torch.randn(out_features, max_rank) / np.sqrt(max_rank))
-            self.V = nn.Parameter(torch.randn(max_rank, in_features) / np.sqrt(in_features))
-
-    @property
-    def weight (self):
-        if self.full_rank:
-            return self._weight
-        else:
-            return self.U @ self.V
-
-    def state_dict(self, *args, **kwargs):
-        # The base implementation of FullRankLinear gets 'weight' and 'bias'
-        state = super().state_dict(*args, **kwargs)
-
-        if not self.full_rank:
-            state['U'] = self.U
-            state['V'] = self.V
-
-        # 'weight' remains the reconstructed/full matrix
-        return state
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-
-        weight_key = prefix + 'weight'
-        u_key = prefix + 'U'
-        v_key = prefix + 'V'
-
-        # Case 1: Loading into a Full-Rank LowRankLinear (i.e., max_rank=None)
-        if self.full_rank:
-            # FullRankLinear's load logic handles loading 'weight' into self._weight.
-            # It also correctly ignores U/V keys if they contain Tensors from a LowRank state.
-            return super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-
-        # Case 2: Loading into a Low-Rank LowRankLinear (self.full_rank=False)
-        else:
-            # This module MUST have U/V factors in the state_dict as Tensors.
-
-            u_in_state = u_key in state_dict and state_dict[u_key] is not None
-            v_in_state = v_key in state_dict and state_dict[v_key] is not None
-
-            if u_in_state and v_in_state:
-                # Load U and V factors
-                self.U.data.copy_(state_dict[u_key])
-                self.V.data.copy_(state_dict[v_key])
-
-                # Check for rank mismatch
-                if self.U.shape[1] != state_dict[u_key].shape[1]:
-                    error_msgs.append(f'Size mismatch for {u_key}: expected size {list(self.U.shape)} but got {list(state_dict[u_key].shape)}.')
-
-                # Pop loaded keys
-                state_dict.pop(u_key)
-                state_dict.pop(v_key)
-
+    def load_state_dict(self, state_dict, strict=True):
+        src_has_lowrank = 'U' in state_dict and 'V' in state_dict
+        if src_has_lowrank:
+            src_rank = state_dict['U'].shape[0]
+            if self.max_rank is None:
+                # low-rank -> full-rank
+                weight = state_dict.get('weight', state_dict['V'] @ state_dict['U'])
+                self.weight.data.copy_(weight)
+                if 'bias' in state_dict and self.bias is not None:
+                    self.bias.data.copy_(state_dict['bias'])
             else:
-                # State is missing U/V Tensors (e.g., loaded from a FullRankLinear). Report as missing.
-                if not u_in_state: missing_keys.append(u_key)
-                if not v_in_state: missing_keys.append(v_key)
-
-            # Pop 'weight' (reconstructed matrix)
-            if weight_key in state_dict:
-                state_dict.pop(weight_key)
-
-            # Handle bias
-            bias_key = prefix + 'bias'
-            if self.bias is not None and bias_key in state_dict:
-                self.bias.data.copy_(state_dict[bias_key])
-                state_dict.pop(bias_key)
-            elif self.bias is None and bias_key in state_dict:
-                unexpected_keys.append(bias_key)
-
-            return
+                # low-rank -> low-rank
+                if self.max_rank != src_rank:
+                    raise ValueError("Cannot load low-rank with different max_rank.")
+                self.U.data.copy_(state_dict['U'])
+                self.V.data.copy_(state_dict['V'])
+                if 'bias' in state_dict and self.bias is not None:
+                    self.bias.data.copy_(state_dict['bias'])
+        else:
+            # full-rank -> full-rank only
+            if self.max_rank is not None:
+                raise ValueError("Cannot load full-rank into low-rank module.")
+            super().load_state_dict(state_dict, strict)
 
 
 class RNN (nn.Module):
@@ -239,7 +207,6 @@ class RNN (nn.Module):
         super(RNN, self).__init__()
         init=init_weights
         print('sim_id', sim_id)
-        self._from_file = []
         self._model_filename=model_filename
 
         self.device = device
@@ -248,23 +215,14 @@ class RNN (nn.Module):
         self.d_output = d_output
         self.d_hidden = d_hidden
 
-        self.i2h = layer_type(d_input, d_hidden, bias=0)
-        if 'i2h' in to_freeze:
-            freeze(self.i2h)
-        if 'i2h' in from_file:
-            self._from_file += ['i2h.'+n for n,_ in self.i2h.state_dict().items()]
+        self.i2h = nn.Linear(d_input, d_hidden, bias=0)
 
-        self.h2h = layer_type(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
-        if 'h2h' in to_freeze:
-            freeze(self.h2h)
-        if 'h2h' in from_file:
-            self._from_file += ['h2h.'+n for n,_ in self.h2h.state_dict().items()]
+        if layer_type == LowRankLinear:
+            self.h2h = LowRankLinear(d_hidden, d_hidden, max_rank=max_rank, bias=bias)
+        else:
+            self.h2h = layer_type(d_hidden, d_hidden, bias=bias)
 
-        self.h2o = layer_type(d_hidden, d_output, bias=bias)
-        if 'h2o' in to_freeze:
-            freeze(self.h2o)
-        if 'h2o' in from_file:
-            self._from_file += ['h2o.'+n for n,_ in self.h2o.state_dict().items()]
+        self.h2o = nn.Linear(d_hidden, d_output, bias=bias)
 
         if nonlinearity in [None, 'linear']:
             self.phi = lambda x: x
@@ -295,16 +253,66 @@ class RNN (nn.Module):
 
         self.initialize_weights(init, seed=sim_id)
 
+        if len(from_file):
+            self.load_state_dict(torch.load(self._model_filename), modules_to_load=from_file)
+
+        if 'i2h' in to_freeze:
+            freeze(self.i2h)
+        if 'h2h' in to_freeze:
+            freeze(self.h2h)
+        if 'h2o' in to_freeze:
+            freeze(self.h2o)
+
+        # print("print_parameters(self.i2h)")
+        # print_parameters(self.i2h)
+        # print("print_parameters(self.h2h)")
+        # print_parameters(self.h2h)
+        # print("print_parameters(self.h2o)")
+        # print_parameters(self.h2o)
+
+    def load_state_dict(self, state_dict, strict=True, modules_to_load=None):
+        """
+        Custom load_state_dict that optionally filters the keys to load only a subset of sub-modules.
+        
+        :param state_dict: The state dictionary to load.
+        :param strict: Whether to check if all keys in state_dict match all keys in the module.
+        :param modules_to_load: A list of module names (strings, e.g., ['layer1']) to load. 
+                                If None, all modules are loaded (default behavior).
+        """
+        if modules_to_load is not None:
+            # Build a set of prefixes (e.g., 'layer1.', 'layer2.')
+            prefixes = tuple(f'{name}.' for name in modules_to_load)
+            
+            # Filter the incoming state_dict
+            filtered_state_dict = {}
+            missing_keys_due_to_filter = []
+            
+            for k, v in state_dict.items():
+                if k.startswith(prefixes):
+                    filtered_state_dict[k] = v
+                else:
+                    # Keep track of keys we ignored because they weren't in the list
+                    missing_keys_due_to_filter.append(k)
+
+            print(f"\n[Parent Load] Loading only modules: {modules_to_load}. Filtered keys: {list(filtered_state_dict.keys())}")
+            
+            # Load the filtered state dict using the standard recursive process
+            # We set strict=False here because we have intentionally removed keys
+            result = super().load_state_dict(filtered_state_dict, strict=False)
+
+            # The keys we removed are now 'missing' from the load operation.
+            # We must re-add them to the 'unexpected' list of the final result, 
+            # as they were present in the input but intentionally ignored.
+            final_unexpected_keys = result.unexpected_keys + missing_keys_due_to_filter
+            return LoadStateDictResult(result.missing_keys, final_unexpected_keys)
+
+        else:
+            # Default behavior: load everything
+            return super().load_state_dict(state_dict, strict=strict)
+
 
     def initialize_weights(self, init, seed=None):
         print('init', init)
-        
-        _pars_dict = {}
-        if self._model_filename is not None:
-            # The parameters to be set from file are removed from the list of
-            # parameters to which the initialisation rule is applied
-            print(f"Loading parameters from file '{self._model_filename}'")
-            _pars_dict = torch.load(self._model_filename)
 
         if seed is not None:
             torch.manual_seed(1990+seed)
@@ -325,19 +333,11 @@ class RNN (nn.Module):
                 f"Invalid init option '{init}'\n" + \
                  "Choose either None, 'Rich', 'Lazy' or 'Const'")
         
-        for name, pars in self.named_parameters():
-            if name in self._from_file:
-                pars.data = _pars_dict[name]
-            elif init is not None:
-                if "weight" in name:
-                    f_in = 1.*pars.data.size()[1]
-                    std = init_f(f_in)
-                    pars.data.normal_(0., std)
-        # # check
-        # for name, pars in self.named_parameters():
-        #     print(name, "\t", torch.max(pars - _pars_dict[name]))
-        # exit()
-        # # end check
+        if init is not None:
+            if "weight" in name:
+                f_in = 1.*pars.data.size()[1]
+                std = init_f(f_in)
+                pars.data.normal_(0., std)
 
     def __hidden_update (self, h, x):
         '''
@@ -600,7 +600,6 @@ class RNNMulti (nn.Module):
 
 if __name__ == "__main__":
 
-
     in_features = 6
     out_features = 4
 
@@ -609,23 +608,10 @@ if __name__ == "__main__":
     
     ## Full-rank to full-rank (compatible)
 
-    # 1. Full -> Full
-    test_txt = "TESTING: Full -> Full"
+    # 1. Low(None) -> Low(None)
+    test_txt = "TESTING: Low(None) -> Low(None)"
     print(cs.BOLD + f"\n\n1. {test_txt}" + cs.END)
-    old = FullRankLinear(in_features, out_features, bias=True)
-    old_state_dict = old.state_dict()
-    new = FullRankLinear(in_features, out_features, bias=True)
-    new.load_state_dict(old_state_dict)
-    print_parameters_comp(old.state_dict(), new.state_dict())
-    if not state_dicts_equal(old_state_dict, new.state_dict()):
-        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
-    else:
-        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
-
-    # 2. Full -> Low(None)
-    test_txt = "TESTING: Full -> Low(None)"
-    print(cs.BOLD + f"\n\n2. {test_txt}" + cs.END)
-    old = FullRankLinear(in_features, out_features, bias=True)
+    old = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
     old_state_dict = old.state_dict()
     new = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
     new.load_state_dict(old_state_dict)
@@ -634,37 +620,12 @@ if __name__ == "__main__":
         raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
     else:
         print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
-
-    # 3. Low(None) -> Full
-    test_txt = "TESTING: Low(None) -> Full"
-    print(cs.BOLD + f"\n\n3. {test_txt}" + cs.END)
-    old = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
-    old_state_dict = old.state_dict()
-    new = FullRankLinear(in_features, out_features, bias=True)
-    new.load_state_dict(old_state_dict)
-    if not state_dicts_equal(old_state_dict, new.state_dict()):
-        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
-    else:
-        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
     
     ## Low-rank to full-rank (compatible) -- the weight matrix can be loaded
 
-    # 4. Low(int) -> Full
-    test_txt = "TESTING: Low(int) -> Full"
-    print(cs.BOLD + f"\n\n4. {test_txt}" + cs.END)
-    old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
-    old_state_dict = old.state_dict()
-    new = FullRankLinear(in_features, out_features, bias=True)
-    new.load_state_dict(old_state_dict)
-    print_parameters_comp(old.state_dict(), new.state_dict())
-    if not state_dicts_equal(old_state_dict, new.state_dict()):
-        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
-    else:
-        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
-
-    # 5. Low(int) -> Low(None)
+    # 2. Low(int) -> Low(None)
     test_txt = "TESTING: Low(int) -> Low(None)"
-    print(cs.BOLD + f"\n\n5. {test_txt}" + cs.END)
+    print(cs.BOLD + f"\n\n2. {test_txt}" + cs.END)
     old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
     old_state_dict = old.state_dict()
     new = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
@@ -677,27 +638,9 @@ if __name__ == "__main__":
 
     ## Full-rank to low-rank (incompatible) -- error should be raised
 
-    # 6. Full -> Low(int)
-    test_txt = "TESTING: Full -> Low(int)"
-    print(cs.BOLD + f"\n\n6. {test_txt}" + cs.END)
-    old = FullRankLinear(in_features, out_features, bias=True)
-    old_state_dict = old.state_dict()
-    new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
-    passed = False
-    try:
-        new.load_state_dict(old_state_dict)
-    except Exception as e:
-        print(f"\"{type(e).__name__}\" exception raised: {e}")
-        passed = True
-    if not passed:
-        raise ValueError(cs.RED + f"[FAILED] {test_txt}" + cs.END)
-    else:
-        print(cs.GREEN + f"[PASSED] {test_txt}" + cs.END)
-
-    
-    # 7. Low(None) -> Low(int)
+    # 3. Low(None) -> Low(int)
     test_txt = "TESTING: Low(None) -> Low(int)"
-    print(cs.BOLD + f"\n\n7. {test_txt}" + cs.END)
+    print(cs.BOLD + f"\n\n3. {test_txt}" + cs.END)
     old = LowRankLinear(in_features, out_features, max_rank=None, bias=True)
     old_state_dict = old.state_dict()
     new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
@@ -714,9 +657,9 @@ if __name__ == "__main__":
 
     ## Low-rank to low-rank (compatible) -- loading U/V should work
 
-    # 8. Low(int) -> Low(int)
+    # 4. Low(int) -> Low(int)
     test_txt = "TESTING: Low(int) -> Low(int)"
-    print(cs.BOLD + f"\n\n8. {test_txt}" + cs.END)
+    print(cs.BOLD + f"\n\n4. {test_txt}" + cs.END)
     old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
     old_state_dict = old.state_dict()
     new = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
@@ -729,9 +672,9 @@ if __name__ == "__main__":
     
     ## Low-rank to low-rank (incompatible) -- if different max_rank, error should be raised
 
-    # 9. Low(int) -> Low(int2)
+    # 5. Low(int) -> Low(int2)
     test_txt = "TESTING: Low(int) -> Low(int2)"
-    print(cs.BOLD + f"\n\n9. {test_txt}" + cs.END)
+    print(cs.BOLD + f"\n\n5. {test_txt}" + cs.END)
     old = LowRankLinear(in_features, out_features, max_rank=2, bias=True)
     old_state_dict = old.state_dict()
     new = LowRankLinear(in_features, out_features, max_rank=3, bias=True)
