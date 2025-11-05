@@ -14,7 +14,7 @@ import random
 from functions import * 
 from train import train
 from train import test_save
-from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear,
+from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear, \
 				print_parameters, print_parameters_comp, state_dicts_equal
 from pprint import pprint
 
@@ -32,6 +32,7 @@ def main(
 	m = 2,
 	task=None,
 	k_steps=1,		# only used for task='RNNPred'
+	k_steps_scheduling=False,
 	objective='CE',
 	from_file = [], 
 	to_freeze = [],
@@ -58,6 +59,10 @@ def main(
 	input_folder_name = '',
 	output_folder_name = '',
 ):
+	if k_steps_scheduling:
+		k_steps_max = k_steps
+		k_steps_schedule = lambda epoch: 1 + int(epoch / n_epochs * k_steps_max)
+
 	print('TASK', task)
 	print('DATASPLIT NO', split_id)
 	print('L=', L)
@@ -77,8 +82,8 @@ def main(
 	types = combined
 
 	if n_types > 0:
-			# Get all ntype-element combinations
-			type_combinations = list(itertools.combinations(types, n_types))
+		# Get all ntype-element combinations
+		type_combinations = list(itertools.combinations(types, n_types))
 
 	# if the number of possible combinations is too large, we just consider the first 20
 	if len(type_combinations) > 20:
@@ -90,9 +95,9 @@ def main(
 	with open(f"{output_folder_name}/classes.pkl", "wb") as handle:
 		pickle.dump(list(type_combinations), handle, protocol=pickle.HIGHEST_PROTOCOL)
 	
-	print(f'number of {n_types}-tuple combinations)', len(type_combinations))
+	print(f'number of {n_types}-tuple combinations:', len(type_combinations))
 
-	for t, types_chosen in enumerate(list(type_combinations)[:1]):
+	for t, types_chosen in enumerate(list(type_combinations)):
 
 		num_classes = len(types_chosen)
 		if from_file != []:
@@ -163,6 +168,9 @@ def main(
 
 		print('TRAINING NETWORK')
 		for epoch in range(n_epochs):
+
+			if k_steps_scheduling:
+				k_steps = k_steps_schedule(epoch)
 			
 			if epoch in epoch_snapshots:
 				print('epoch', epoch, test_tasks)
@@ -272,7 +280,8 @@ if __name__ == "__main__":
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
 		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
-		k_steps=1,	# number of steps for the k-steps rollout (prediction only)
+		k_steps=None,	# number of steps for the k-steps rollout (prediction only)
+		k_steps_scheduling=True,
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
@@ -346,6 +355,15 @@ if __name__ == "__main__":
 		sim_id_col_index = 4
 		index = int(sys.argv[1]) - 1
 
+		k_steps = int(sys.argv[2])
+		if k_steps == 0:
+			k_steps = None
+		main_kwargs['k_steps'] = k_steps
+		main_kwargs['k_steps_scheduling'] = bool(int(sys.argv[3]))
+
+		for key, val in main_kwargs.items():
+			print(f"{str(key):<20}:  {val}")
+
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
 		size = 100
@@ -365,7 +383,7 @@ if __name__ == "__main__":
 
 			output_folder_name = (
 				f"test_rollout/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
-				f"kSteps{main_kwargs['k_steps']}"
+				f"kSteps{main_kwargs['k_steps']}"+("scheduled" if main_kwargs['k_steps_scheduling'] else "")+"_"
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"

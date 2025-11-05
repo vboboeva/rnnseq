@@ -132,7 +132,7 @@ def train_batch(X_batch, y_batch, model, optimizer, loss_function, task, weight_
 	optimizer.zero_grad()
 
 	if task == 'RNNPred':
-		if k_steps == 1:
+		if k_steps in [1, None]:
 			ht, out_batch = model.forward(X_batch)
 			loss = loss_function(out_batch[:-1], X_batch[1:])
 		elif (k_steps > 0) and (k_steps < len(X_batch)):
