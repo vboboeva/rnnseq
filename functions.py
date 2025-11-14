@@ -416,6 +416,27 @@ def make_results_ablate_dict(tokens_train, tokens_test, labels_train, labels_tes
 	results['Whh'] = []
 	return results
 
+def make_results_ablate_sv_dict(tokens_train, tokens_test, labels_train, labels_test, svs_chosen):
+
+	results = {}
+
+	for measure in ['Loss', 'Retrieval', 'HiddenAct', 'LatentAct']:
+		results.update({measure:{}}) 
+
+		for set_, tokens, labels in (zip(['train', 'test'], [tokens_train, tokens_test], [labels_train, labels_test])):
+
+			tokens = [''.join(token) for token in tokens]
+		
+			for token, label in (zip(tokens, labels)):
+
+				results[measure].update({token:{}})
+
+				for svs in svs_chosen:
+					results[measure][token].update({svs:{}})
+					
+	results['Whh'] = []
+	return results
+
 def find_optimal_n(n_clusters, mat_no_zeros):
 	scores = list()
 	labels_list = list()
