@@ -16,6 +16,7 @@ from train import train
 from train import test_save
 from model import RNN, RNNAutoencoder, RNNMulti, LinearWeightDropout, LowRankLinear, \
 				print_parameters, print_parameters_comp, state_dicts_equal
+from lowrank_utils import remove_SVs_from_weights
 from pprint import pprint
 
 from data_utils import augment_data
@@ -49,6 +50,7 @@ def main(
 	drop_connect = 0.,
 	weight_decay = 0.,
 	ablate=False,
+	ablate_sv=False,
 	delay=0,
 	cue_size=1,
 	data_balance='class',
@@ -228,6 +230,50 @@ def main(
 		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+		if ablate_sv:
+
+			svs_chosen = list(range(model.max_rank if model.max_rank is not None else 5))
+
+			print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION OF SVs')
+
+			if task == 'RNNMulti':
+				test_tasks = ['RNNClass', 'RNNPred', 'RNNAuto']
+				results_ablate_list = []
+				for test_task in test_tasks:
+					results_ablate = make_results_ablate_sv_dict(tokens_train, tokens_test, labels_train, labels_test, svs_chosen)
+					results_ablate_list.append(results_ablate)
+			else:
+				test_tasks = [task]
+				results_ablate = make_results_ablate_sv_dict(tokens_train, tokens_test, labels_train, labels_test, svs_chosen)
+				results_ablate_list = [results_ablate]
+
+			for idx_ablate, ablated_svs in enumerate(svs_chosen):
+				print('ablating SVs', ablated_svs)
+
+				# "ablate" selected components
+				# 1. Extract weights and remove selected SVs
+				state_dict = model.state_dict()
+				W = model.h2h.weight.detach().cpu().numpy()
+				reduced_W = remove_SVs_from_weights(W, [idx_ablate], verbose=True)
+
+				# 2. Initialise a (full-rank) temporary model
+				reduced_model_kwargs = model_kwargs.copy()
+				reduced_model_kwargs['max_rank'] = None
+				reduced_model = model_class(*model_args, **reduced_model_kwargs)
+
+				# 3. Set weights of temporary model
+				state_dict['h2h.weight'] = torch.Tensor(reduced_W)
+				reduced_model.load_state_dict(state_dict, strict=False)
+				
+				test_save(results_ablate, reduced_model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, idx_ablate = idx_ablate, class_ablate = ablated_svs)
+
+				meanval_train = np.mean([results_ablate['Loss'][k][ablated_svs] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'train'])
+
+				meanval_test=np.mean([results_ablate['Loss'][k][ablated_svs] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'test'])
+
+				print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
+
+				print('\n')
 
 		# ablating model at end of training
 		if ablate:
@@ -289,7 +335,7 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
+		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
 		k_steps=None,	# number of steps for the k-steps rollout (prediction only)
 		k_steps_scheduling=True,
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
@@ -308,6 +354,7 @@ if __name__ == "__main__":
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
+		ablate_sv = True, # whether to test net with ablated SVs
 		delay = 0, # number of zero-padding steps at end of input
 		cue_size = 4, # number of letters to cue net with (prediction task only!!)
 		data_balance = 'class', # choose btw 'class' and 'whatwhere'
@@ -392,7 +439,7 @@ if __name__ == "__main__":
 			np.random.seed(1990+split_id)
 
 			output_folder_name = (
-				f"test_rollout/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
+				f"test_ablate_sv/Task{main_kwargs['task']}_N{n_hidden}_nlatent{main_kwargs['n_latent']}_"
 				f"kSteps{main_kwargs['k_steps']}"+("scheduled" if main_kwargs['k_steps_scheduling'] else "")+"_"
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
