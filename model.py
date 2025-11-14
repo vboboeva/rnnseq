@@ -209,6 +209,8 @@ class RNN (nn.Module):
         print('sim_id', sim_id)
         self._model_filename=model_filename
 
+        self.max_rank = max_rank
+
         self.device = device
         # Defining the number of layers and the nodes in each layer
         self.d_input = d_input
