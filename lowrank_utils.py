@@ -14,7 +14,7 @@ import pickle
 # from make_data import make_data
 from sklearn.decomposition import PCA
 from collections import defaultdict
-from colorstrings import CYAN_STR, RED_STR, END_STR
+from colorstrings import colorstrings as cs
 from analysis_utils import dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
 
 def make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR):
@@ -455,9 +455,9 @@ def plot_UC():
         print('Ultra-metric content over time for all sequences')
         all_UCs = defaultdict(dict)
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             for _t in range(_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 all_UCs[_n][_t] = [compute_umcontent(distance_f(hs[None,_t,:,:_n]), return_triplets=False)[0] for hs in _hs_proj[:10]]
         with open(join(DATA_DIR, 'ultrametric_content_all.pkl'), 'wb') as f:
             pickle.dump(to_dict(all_UCs), f)
@@ -468,11 +468,11 @@ def plot_UC():
         # (this should be a lower bound to the ultrametric content for all the sequences together)
         all_UCs_class = defaultdict(lambda: defaultdict(dict))
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             # (for t=0 the sequence 1 element, and all sequences would be considered together;
             # we start from t=1)
             for _t in range(1,_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 types_seq = np.take([c[:_t+1] for c in types_set], _all_classes[0])
                 for _c in np.unique(types_seq):
                     print(_c)
@@ -486,11 +486,11 @@ def plot_UC():
         # at time t we look for the groups of sequences that share the structure up to time t-1
         all_UCs_group = defaultdict(lambda: defaultdict(dict))
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             # (for t=0,1 the preceding part of the sequence is either empty or has 1 element,
             # so all sequences would be considered together; we start from t=2)
             for _t in range(2,_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 types_seq = np.take([c[:_t] for c in types_set], _all_classes[0])
                 for _c in np.unique(types_seq):
                     print(_c)
