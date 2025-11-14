@@ -4,6 +4,7 @@ from numpy import savetxt
 import torch
 import os
 import sys
+from typing import Sequence
 from os.path import join
 from glob import glob
 # import par_transfer as par
@@ -78,6 +79,25 @@ def align_singular_vectors(all_Rs, all_refs, n_components=2):
         all_Rs_aligned.append(_R)
     return all_Rs_aligned
 
+
+def remove_SVs_from_weights (W: np.ndarray, ids: Sequence[int], verbose: bool = True) -> np.ndarray:
+
+    max_rank = min(*W.shape[-2:])
+
+    U, S, Vh = np.linalg.svd(W, full_matrices=False)
+
+    valid_ids = [i for i in ids if i in range(max_rank)]
+    for i in valid_ids:
+        S[...,i] = 0
+
+    if verbose:
+        invalid_ids = sorted(list(set(ids) - set(valid_ids)))
+        if len(invalid_ids):
+            print(cs.CYAN + f"Skipping invalid ids: [{','.join([str(i) for i in invalid_ids])}]" + cs.END)
+
+    reduced_W = np.einsum('...ik,...k,...kj->...ij', U, S, Vh)
+
+    return reduced_W
 
 def plot_weights_histograms():
     fig, axs = plt.subplots(2,2, figsize=(8,6))
@@ -546,4 +566,37 @@ def plot_UC():
     fig.tight_layout()
     ax.legend(loc='best', title='num SV')
     fig.savefig(join(FIGS_DIR, f'ultrametric_content.svg'), dpi=300)
-    plt.close(fig)    
+    plt.close(fig)
+
+
+if __name__ == "__main__":
+
+
+    W = np.random.randn(3, 4, 5)
+
+    reduced_W = remove_SVs_from_weights(W, [1,3], verbose=True)
+
+    U, S, Vh = np.linalg.svd(W, full_matrices=False)
+
+    # Ur, Sr, Vhr = np.linalg.svd(reduced_W)
+    Sr = np.einsum('...ki,...kl,...jl->...ij', U, reduced_W, Vh)
+
+    fig, axs = plt.subplots(1,len(W), figsize=(3*len(W), 2.5))
+    plt.tight_layout()
+    for sr, ax in zip(Sr, axs.ravel()):
+        ax.imshow(sr)
+        for i in range(len(sr)):
+            for j in range(len(sr)):
+                ax.text(i, j, f"{sr[i,j]:.1f}", c='r', fontsize=10)
+    fig.savefig('test_reduced_S.png')
+    plt.close(fig)
+
+    fig, axs = plt.subplots(1,len(W), figsize=(3*len(W), 2))
+    plt.tight_layout()
+    for i, (s, sr, ax) in enumerate(zip(S, Sr, axs.ravel())):
+        ax.plot([0,S.shape[-1]-1], [0,0], c='k', ls='--', lw=.5)
+        ax.plot(s, c='r')
+        ax.plot(np.diagonal(sr), c='b', ls='--')
+
+    fig.savefig('test_reduced_W.png')
+    plt.close(fig)
