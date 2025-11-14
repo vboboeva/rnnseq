@@ -571,32 +571,53 @@ def plot_UC():
 
 if __name__ == "__main__":
 
+    from model import RNN
 
-    W = np.random.randn(3, 4, 5)
+    print(cs.CYAN + "Initialise original model" + cs.END)
+    model_class = RNN
+    model_args = (3, 16, 1, 5,)
+    model_kwargs = dict(max_rank=5)
+    model = model_class(*model_args, **model_kwargs)
+    
+    print(cs.CYAN + "State of original model" + cs.END)
+    for key, val in model.named_parameters():
+        print(f"{key:<15} {str(val.shape):<25} {val.requires_grad}")
 
+    print(cs.CYAN + "Extract and reduce weight matrix" + cs.END)
+    state_dict = model.state_dict()
+    W = model.h2h.weight.detach().cpu().numpy()
     reduced_W = remove_SVs_from_weights(W, [1,3], verbose=True)
+
+    print(cs.CYAN + "Initialise reduced model" + cs.END)
+    reduced_model_kwargs = model_kwargs.copy()
+    reduced_model_kwargs['max_rank'] = None
+    reduced_model = model_class(*model_args, **reduced_model_kwargs)
+    state_dict['h2h.weight'] = torch.Tensor(reduced_W)
+    reduced_model.load_state_dict(state_dict, strict=False)
+
+    print(cs.CYAN + "State of reduced model" + cs.END)
+    for key, val in reduced_model.named_parameters():
+        print(f"{key:<15} {str(val.shape):<25} {val.requires_grad}")
 
     U, S, Vh = np.linalg.svd(W, full_matrices=False)
 
-    # Ur, Sr, Vhr = np.linalg.svd(reduced_W)
+    reduced_W = reduced_model.h2h.weight.detach().cpu().numpy()
     Sr = np.einsum('...ki,...kl,...jl->...ij', U, reduced_W, Vh)
 
-    fig, axs = plt.subplots(1,len(W), figsize=(3*len(W), 2.5))
+    fig, ax = plt.subplots()
     plt.tight_layout()
-    for sr, ax in zip(Sr, axs.ravel()):
-        ax.imshow(sr)
-        for i in range(len(sr)):
-            for j in range(len(sr)):
-                ax.text(i, j, f"{sr[i,j]:.1f}", c='r', fontsize=10)
+    ax.imshow(Sr)
+    for i in range(len(Sr)):
+        for j in range(len(Sr)):
+            ax.text(i, j, f"{Sr[i,j]:.1f}", c='r', fontsize=4)
     fig.savefig('test_reduced_S.png')
     plt.close(fig)
 
-    fig, axs = plt.subplots(1,len(W), figsize=(3*len(W), 2))
+    fig, ax = plt.subplots()
     plt.tight_layout()
-    for i, (s, sr, ax) in enumerate(zip(S, Sr, axs.ravel())):
-        ax.plot([0,S.shape[-1]-1], [0,0], c='k', ls='--', lw=.5)
-        ax.plot(s, c='r')
-        ax.plot(np.diagonal(sr), c='b', ls='--')
+    ax.plot([0,S.shape[-1]-1], [0,0], c='k', ls='--', lw=.5)
+    ax.plot(S, c='r')
+    ax.plot(np.diagonal(Sr), c='b', ls='--')
 
     fig.savefig('test_reduced_W.png')
     plt.close(fig)
