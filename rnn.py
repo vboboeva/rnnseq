@@ -126,29 +126,39 @@ def main(
 			layer_type = LowRankLinear
 
 		# Create the model
+		model_args = alpha, n_hidden, n_layers,
+		model_kwargs = dict(
+				device=device,
+				model_filename=model_filename,
+				from_file=from_file,
+				to_freeze=to_freeze,
+				init_weights=init_weights,
+				layer_type=layer_type
+			)
+
 		if task in ['RNNClass', 'RNNPred']:
 			if task == 'RNNClass':
 				output_size = num_classes
 			else:
 				output_size = alpha
-			model = RNN(alpha, n_hidden, n_layers, output_size,
-						nonlinearity=transfer_func, device=device,
-						model_filename=model_filename, from_file=from_file, max_rank=max_rank,
-						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type, sim_id=sim_id)
+			model_class = RNN
+			model_args += (output_size,)
+			model_kwargs['nonlinearity'] = transfer_func
+			model_kwargs['max_rank'] = max_rank
+			model_kwargs['sim_id'] = sim_id
 		
 		elif task == 'RNNAuto':
-			model = RNNAutoencoder(alpha, n_hidden, n_layers, n_latent, L+cue_size,
-						nonlinearity=transfer_func, device=device,
-						model_filename=model_filename, from_file=from_file,
-						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
+			model_class = RNNAutoencoder
+			model_args += (n_latent, L+cue_size,)
+			model_kwargs['nonlinearity'] = transfer_func
 		
 		elif task == 'RNNMulti':
-			model = RNNMulti(alpha, n_hidden, n_layers, n_latent, num_classes, L+cue_size,
-						device=device, model_filename=model_filename, from_file=from_file,
-						to_freeze=to_freeze, init_weights=init_weights, layer_type=layer_type)
-
+			model_class = RNNMulti
+			model_args += (n_latent, num_classes, L+cue_size,)
 		else:
 			raise ValueError(f"Model not recognized: {task}")
+
+		model = model_class(*model_args, **model_kwargs)
 
 		# Set up the optimizer
 		optimizer = optim.Adam(
