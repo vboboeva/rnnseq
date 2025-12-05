@@ -166,33 +166,7 @@ def plot_SVD_results (all_VEs, all_hs_proj, all_Vhs, FIGS_DIR, n_components=2, *
     fig.savefig(join(FIGS_DIR, f'hidden_last_step_coeffs.svg'), dpi=300)
     plt.close(fig)
 
-def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs,types_set, FIGS_DIR):
-    # for each class find the dimensionality of activity vs time (for each simulation)
-    # and plot box / mean+-std of dimensionality across simulations vs time
-    # (one curve for each class)
-
-    all_SVDs_class = [{c: np.linalg.svd(h)[1:] for c, h in h_class.items()} for h_class in all_hs_class]
-
-    all_VEs_class = [{c: np.cumsum(SVDs[0]**2, axis=-1)/np.sum(SVDs[0]**2, axis=-1)[:,None] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
-
-    all_Vhs_class = [{c: SVDs[1] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
-
-    all_Vhs_class_proj= [{c: Vh_class @ R.T for c, Vh_class in Vhs_class.items()} for Vhs_class, R in zip(all_Vhs_class, all_Rs)]
-
-    all_SVDs = [np.linalg.svd(h[-1])[1:] for h in all_hs] # h[-1] for the end of training
-    all_VEs = np.array([np.cumsum(S**2, axis=1)/np.sum(S**2, axis=1)[:, None] for S, _ in all_SVDs])
-    # all_Vhs = [Vh for _, Vh in all_SVDs]    
-
-    frac_threshold = .9
-
-    # plot all fraction of variance explained by class
-    VE_class = defaultdict(list)
-    for VEs_class in all_VEs_class:
-        for c, VEs in VEs_class.items():
-            VE_class[c].append(VEs)
-    Ds_class = {c: dimension(np.stack(VE), frac_threshold) for c, VE in VE_class.items()}
-
-    all_Ds = dimension(all_VEs, frac_threshold)
+def plot_SVDs_dimensionality_all(all_Ds, Ds_class, types_set, FIGS_DIR):
 
     fig, ax = plt.subplots(figsize=(2,1.5))
     # plt.subplots_adjust(left=.2, right=.99, bottom=.2, top=.99)
@@ -221,8 +195,20 @@ def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs,types_set, FIGS_DI
     fig.savefig(join(FIGS_DIR, f'SVDs_and_dimensionality_all.svg'), dpi=300)
     plt.close(fig)
 
+def compute_SVs_stats (all_weights, all_weights_proj):
 
-def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
+    all_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_weights_proj]
+    all_S = [np.linalg.svd(W, compute_uv=False) for W in all_weights]
+
+    out_dict = {}
+    out_dict['all_S'] = all_S
+    out_dict['S_mean'] = np.linalg.svd(np.mean(all_weights, axis=0), compute_uv=False)
+    out_dict['S_mean_proj'] = np.linalg.svd(np.mean(all_weights_proj, axis=0), compute_uv=False)
+
+    return out_dict
+
+
+def plot_SVDs_weights(svd_dict, FIGS_DIR, label='None'):
     #
     # Labels with main text notation
     #
@@ -230,12 +216,14 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     # all SVDs are the same across simulations -- whether we rotate or not
     # but the SVDs of the average matrices are going to be very different
 
-    all_rec_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights_proj]
-    all_rec_S = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights]
+    all_S = svd_dict['all_S']
+    S_mean = svd_dict['S_mean']
+    S_mean_proj = svd_dict['S_mean_proj']
+
+    n_components = min(10, len(np.mean(all_S, axis=0)))
 
     fig, ax = plt.subplots(figsize=(3,1.6))
-    n_components = 15
-    _xticks = [0,5,10,15]
+    _xticks = [0,5,10]
     _yticks = [0,4,8]
     ax.set_xlim(min(_xticks),max(_xticks))
     # ax.set_ylim(min(_yticks),max(_yticks))
@@ -244,16 +232,15 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.set_xticklabels([str(t) for t in _xticks])
     # ax.set_yticklabels([str(t) for t in _yticks])
     ax.axvspan(0, 3.5, color='wheat', alpha=0.5, lw=0)
-    # for S_proj, S in zip(all_rec_S_proj,all_rec_S):
+    # for S_proj, S in zip(all_S_proj,all_S):
     #     ax.plot(np.arange(n_components)+1, S[:n_components], c='b', lw=.1, alpha=.2)
-    ax.plot(np.arange(n_components)+1, np.mean(all_rec_S,axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
+    ax.plot(np.arange(n_components)+1, np.mean(all_S, axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
     ax.fill_between(np.arange(n_components)+1,
-                    np.percentile(all_rec_S,5,axis=0)[:n_components],
-                    np.percentile(all_rec_S,95,axis=0)[:n_components],
+                    np.percentile(all_S,5,axis=0)[:n_components],
+                    np.percentile(all_S,95,axis=0)[:n_components],
                     ls='--', color='b', lw=0, alpha=.2, label='av S orig')
-    # ax.plot(np.arange(n_components)+1, np.mean(all_rec_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
-    S_mean = np.linalg.svd(np.mean(all_rec_weights, axis=0), compute_uv=False)
-    S_mean_proj = np.linalg.svd(np.mean(all_rec_weights_proj, axis=0), compute_uv=False)
+    # ax.plot(np.arange(n_components)+1, np.mean(all_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
+
     ax.plot(np.arange(n_components)+1,S_mean[:n_components], c='b', lw=1, marker='o', markersize=3, label='S av orig')
     ax.plot(np.arange(n_components)+1,S_mean_proj[:n_components], c='r', lw=1, marker='o', markersize=3, label='S av rot')
     # ax.set_ylim(.1,10)
@@ -262,7 +249,7 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.set_ylabel("Singular value")
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     fig.tight_layout()
-    fig.savefig(join(FIGS_DIR, f'SVDs_recurrent_weights.svg'), dpi=300)
+    fig.savefig(join(FIGS_DIR, f'SVDs_{label}_weights.svg'), dpi=300)
     plt.close(fig)
 
 def plot_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
@@ -407,14 +394,14 @@ def plot_alignment_activity_trans(hs_proj_class, types_set, FIGS_DIR):
 
 
 def plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_DIR):
-    n_components = 5
+    n_components = 4
 
     # one plot for each time step -- one single simulation, all sequences
     sims = [0]
     # sims = [0,1,2]
     print('... plotting simulations '+', '.join([str(sim) for sim in sims]))
     fig, axss = plt.subplots(len(sims), hs_proj_class.shape[2], figsize=(2*hs_proj_class.shape[2], 2*len(sims)))
-    axss = axss.reshape(-1,hs_proj_class.shape[2])
+    axss = axss.reshape(-1, hs_proj_class.shape[2])
     plt.subplots_adjust(left=.05, right=.95, top=.95, bottom=.05)
     fig.tight_layout()
     _hs_proj_class = hs_proj_class.transpose(1,2,3,4,0) # (sim, time, seq, N, class,) 
@@ -435,17 +422,7 @@ def plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_
         fig.savefig(join(FIGS_DIR, f'alignment_weights-activity_times_allseq.svg'), dpi=300)
         plt.close(fig)
 
-def plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR):
-    _hs_proj = hs_proj_class.transpose(1,2,0,3,4) # (class, sim, time, p, N) -> (sim, time, class, p, N,)
-
-    # subsample -- for faster devel
-    ids = np.random.choice(_hs_proj.shape[-2], size=20, replace=False)
-    _ids_classes = (_hs_proj.shape[-2]*np.arange(_hs_proj.shape[-3])[:,None]  + ids[None,:]).reshape(-1)
-    _all_classes = [np.take(_classes, _ids_classes) for _classes in all_classes]
-    _hs_proj = np.take(_hs_proj, ids, axis=-2)
-
-    _shape = _hs_proj.shape
-    _hs_proj = np.reshape(_hs_proj, (*_shape[:2], _shape[2]*_shape[3], _shape[4]))
+def plot_cosine_similarity(_hs_proj, _all_classes, FIGS_DIR):
 
     # plot cosine similarity of few simulations
     hs = _hs_proj[0]
@@ -460,7 +437,7 @@ def plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR):
     fig.savefig(join(FIGS_DIR, f'cosine_similarity.svg'), dpi=300)
     plt.close(fig)
 
-def plot_UC():
+def plot_UC(_hs_proj, types_set, _all_classes, DATA_DIR, FIGS_DIR):
     # Ultrametricity over time
 
     if par.compute_uc:
