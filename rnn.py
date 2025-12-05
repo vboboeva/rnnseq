@@ -193,7 +193,7 @@ def main(
 					
 					meanval_train = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'train'])
 
-					meanval_test=np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
+					meanval_test = np.mean([results['Loss'][k][epoch] for k in results['Loss'].keys() if token_to_set[k] == 'test'])
 
 					print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
 			
@@ -230,9 +230,11 @@ def main(
 		with open(f"{output_folder_name}/token_to_type_classcomb{t}.pkl", 'wb') as handle:
 			pickle.dump(token_to_type, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+
+		# ablating svs at end of training
 		if ablate_sv:
 
-			svs_chosen = list(range(model.max_rank if model.max_rank is not None else 5))
+			svs_chosen = list(range(model.max_rank if model.max_rank is not None else 3))
 
 			print('epoch', epoch, test_tasks, 'TEST AFTER ABLATION OF SVs')
 
@@ -247,8 +249,8 @@ def main(
 				results_ablate = make_results_ablate_sv_dict(tokens_train, tokens_test, labels_train, labels_test, svs_chosen)
 				results_ablate_list = [results_ablate]
 
-			for idx_ablate, ablated_svs in enumerate(svs_chosen):
-				print('ablating SVs', ablated_svs)
+			for idx_ablate in svs_chosen:
+				print('ablating SVs', idx_ablate)
 
 				# "ablate" selected components
 				# 1. Extract weights and remove selected SVs
@@ -265,15 +267,19 @@ def main(
 				state_dict['h2h.weight'] = torch.Tensor(reduced_W)
 				reduced_model.load_state_dict(state_dict, strict=False)
 				
-				test_save(results_ablate, reduced_model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, idx_ablate = idx_ablate, class_ablate = ablated_svs)
+				test_save(results_ablate, reduced_model, X_train, X_test, y_train, y_test, tokens_train, tokens_test, letter_to_index, index_to_letter, test_task, objective, n_hidden, L, alphabet, delay, cue_size, idx_ablate = idx_ablate, class_ablate = idx_ablate)
 
-				meanval_train = np.mean([results_ablate['Loss'][k][ablated_svs] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'train'])
+				meanval_train = np.mean([results_ablate['Loss'][k][idx_ablate] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'train'])
 
-				meanval_test=np.mean([results_ablate['Loss'][k][ablated_svs] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'test'])
+				meanval_test = np.mean([results_ablate['Loss'][k][idx_ablate] for k in results_ablate['Loss'].keys() if token_to_set[k] == 'test'])
 
 				print(f'{test_task} Loss Tr {meanval_train:.2f} Loss Test {meanval_test:.2f}', end = '   ')
 
 				print('\n')
+
+			with open(f"{output_folder_name}/results_ablatesv_task{test_task}_classcomb{t}_sim{sim_id}.pkl", 'wb') as handle:
+				pickle.dump(results_ablate, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 		# ablating model at end of training
 		if ablate:
@@ -341,16 +347,16 @@ if __name__ == "__main__":
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
 		from_file = [], # choose one or more of ['i2h', 'h2h'], if setting state of layers from file
 		to_freeze = [], # choose one or more of ['i2h','h2h'], those  layers not to be updated   
-		max_rank=None,
+		max_rank = None,
 		init_weights = None, # choose btw None, 'Const', 'Lazy', 'Rich' , weight initialization
 		learning_rate = 0.001,
 		transfer_func = 'relu', # transfer function of RNN units only
-		n_epochs = 50, # number of training epochs
+		n_epochs = 51, # number of training epochs
 		batch_size = 1, #16, # GD if = size(training set), SGD if = 1
-		frac_train = 0.8, # fraction of dataset to train on
+		frac_train = 1.0, # fraction of dataset to train on
 		n_repeats = 1, # number of repeats of each sequence for training
 		alpha = 10, # size of alphabet
-		snap_freq = 1, # snapshot of net activity every snap_freq epochs
+		snap_freq = 5, # snapshot of net activity every snap_freq epochs
 		drop_connect = 0., # fraction of dropped connections (reg)
 		# weight_decay = 0.2, # weight of L1 regularisation
 		ablate = False, # whether to test net with ablated units
@@ -400,7 +406,6 @@ if __name__ == "__main__":
 
 		if sim_idx > 0:
 			continue
-		
 	
 		# parameters
 		alphabet = [string.ascii_lowercase[i] for i in range(main_kwargs['alpha'])]
@@ -423,10 +428,9 @@ if __name__ == "__main__":
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
-		size = 100
+		size = 5
 		for i in range(size):
 			row_index = index * size + i
-		# for split_id in range(40):
 
 			L = int(params[row_index, L_col_index])
 			n_types = int(params[row_index, n_types_col_index])
@@ -444,8 +448,8 @@ if __name__ == "__main__":
 				f"L{L}_m{main_kwargs['m']}_alpha{main_kwargs['alpha']}_nepochs{main_kwargs['n_epochs']}_"
 				f"ntypes{n_types}_fractrain{main_kwargs['frac_train']:.1f}_obj{main_kwargs['objective']}_"
 				f"init{main_kwargs['init_weights']}_transfer{main_kwargs['transfer_func']}_"
-				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_{sim_idx}"
-				f"max_rank{main_kwargs['max_rank']}"
+				f"cuesize{main_kwargs['cue_size']}_delay{main_kwargs['delay']}_datasplit{split_id}_"
+				f"maxrank{main_kwargs['max_rank']}_{sim_idx}"
 			)
 
 			input_folder_name = (
