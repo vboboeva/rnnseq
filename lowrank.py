@@ -14,20 +14,19 @@ import pickle
 # from make_data import make_data
 from sklearn.decomposition import PCA
 from collections import defaultdict
-from colorstrings import CYAN_STR, RED_STR, END_STR
-from lowrank_utils import * #plot_mean_loss, align_singular_vectors, plot_SVD_results, plot_SVDs_dimensionality_all, plot_recurrent_weights, plot_all_weights, dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
+# from colorstrings import CYAN_STR, RED_STR, END_STR
+from lowrank_utils import plot_mean_loss, align_singular_vectors, plot_SVD_results, plot_SVDs_dimensionality_all, plot_recurrent_weights, plot_all_weights, plot_cosine_similarity, plot_alignment_weights_activity_times_allseq, plot_alignment_activity_trans, plot_alignment_weights_activity_timestep, plot_alignment_weights_activity_class, plot_SVDs_weights, compute_SVs_stats, plot_UC #, make_save_mean_model
+from analysis_utils import compute_dimensionality
 
 
 folder_name = join(f'Task{par.task}_N{par.n_hidden}_nlatent{par.n_latent}_L{par.L}_m{par.m}_alpha{par.alpha}'+\
                    f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}'+\
                    # f'_nepochs{par.n_epochs}_ntypes{par.n_types}_fractrain{par.frac_train:.1f}_obj{par.loss}_'+\
-                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{par.datasplit}_noise{par.train_noise:.3f}'
-                   
+                   f'_init{par.init}_transfer{par.transfer}_cuesize{par.cue_size}_delay{par.delay}_datasplit{par.datasplit}_maxrank{par.max_rank}_0'                   
                   )
 
 DATA_DIR = join(par.folder, folder_name)
 print("Data dir: ", DATA_DIR)
-
 
 classcomb_path = join(par.folder, folder_name, 'classes.pkl')
 with open(classcomb_path, 'rb') as handle:
@@ -53,10 +52,12 @@ def get_all_sims_paths (folder_name):
     model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
     # model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
     results_paths = sorted(glob(join(DATA_DIR, f'results_task{par.task}_classcomb{par.classcomb}_sim*.pkl')))
-    return model_paths, results_paths
+    results_ablatesv_paths = sorted(glob(join(DATA_DIR, f'results_ablatesv_task{par.task}_classcomb{par.classcomb}_sim*.pkl')))
+
+    return model_paths, results_paths, results_ablatesv_paths
 
 
-model_paths, results_paths = get_all_sims_paths(folder_name)
+model_paths, results_paths, results_ablatesv_paths = get_all_sims_paths(folder_name)
 
 # for i, path in enumerate(model_paths):
 #     print(f"{str(i):<5}{path}")
@@ -68,6 +69,7 @@ mean_model_path = join(DATA_DIR, f'model_state_classcomb{par.classcomb}_mean.pth
 print('Load all results')
 all_models = [torch.load(path, map_location="cpu") for path in model_paths]
 all_results = [pickle.load(open(path, 'rb')) for path in results_paths]
+all_results_ablatesv = [pickle.load(open(path, 'rb')) for path in results_ablatesv_paths]
 
 assert len(all_results) and len(all_models), "Empty results..."
 assert len(all_results) == len(all_models), f"Length mismatch betwen results and models, {len(all_results)} vs {len(all_models)}"
@@ -89,11 +91,12 @@ assert np.all([all_sequences[0] == s for s in all_sequences]), \
 all_classes = [np.array([token_to_type[k] for k in res['HiddenAct'].keys() if token_to_set[k] == par.whichset]) for res in all_results] # classes (n_seq,)
 all_hs = [np.array([list(d.values()) for k, d in res['HiddenAct'].items() if token_to_set[k] == par.whichset]).transpose((1,2,0,3)) for res in all_results]    # hidden act (n_epochs_saved, L, n_seq, n_hidden,) -- convenient for SVD
 
+
 print(f'Extract weights')
 # extract all weights
 all_input_weights = [m['i2h.weight'].numpy() for m in all_models]
 all_output_weights = [m['h2o.weight'].numpy() for m in all_models]
-all_rec_weights = [m['h2h.weight'].numpy() for m in all_models]
+all_rec_weights = [m['weight'].numpy() for m in all_models]
 
 # extract all biases (only those in the recurrent layer are supposed to be non-vanishing)
 all_rec_biases = [m['h2h.bias'].numpy() for m in all_models]
@@ -142,7 +145,7 @@ all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     
 all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
+# make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
 
 ############### ANALYSIS OF HIDDEN-LAYER ACTIVITY ###############################################
 
@@ -161,7 +164,10 @@ unique_classes = np.unique(all_classes[0])
 
 all_hs_class = [{c: np.take(h, np.where(classes==c)[0], axis=2)[-1] for c in unique_classes} for h, classes in zip(all_hs, all_classes)]
 
-plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs, types_set, FIGS_DIR)
+
+all_Ds, Ds_class = compute_dimensionality(all_hs, all_classes, all_Rs, threshold=0.9)
+
+plot_SVDs_dimensionality_all(all_Ds, Ds_class, types_set, FIGS_DIR)
 
 #############################################################   ANALYSIS OF WEIGHTS #############################################################
 
@@ -173,7 +179,14 @@ print('Plot weights -- their SVDs')
 # all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
 # all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
+rec_weights_dict = compute_SVs_stats(all_rec_weights, all_rec_weights_proj)
+plot_SVDs_weights(rec_weights_dict, FIGS_DIR, label='Recurrent')
+
+input_weights_dict = compute_SVs_stats(all_input_weights, all_input_weights_proj)
+plot_SVDs_weights(input_weights_dict, FIGS_DIR, label='Input')
+
+output_weights_dict = compute_SVs_stats(all_output_weights, all_output_weights_proj)
+plot_SVDs_weights(output_weights_dict, FIGS_DIR, label='Output')
 
 print('Plot recurrent weights')
 
@@ -199,9 +212,12 @@ all_rec_Vhs_aligned = align_singular_vectors(all_rec_Vhs, all_refs, n_components
 print('... plotting')
 
 hs_proj_class = defaultdict(list)
+# for rec_Vh, hs_class in zip(all_rec_Vhs, all_hs_class):
 for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
+# for rec_U, hs_class in zip(all_rec_Us, all_hs_class):
     for c, hs in hs_class.items():
         hs_proj_class[c].append(np.mean(np.dot(hs, rec_Vh.T), axis=1))
+        # hs_proj_class[c].append(np.mean(np.dot(hs, rec_U), axis=1))
 hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sim, time, p, N)
 
 # hs_proj_class = defaultdict(list)
@@ -214,7 +230,6 @@ hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.item
 
 plot_alignment_weights_activity_class(hs_proj_class, types_set, FIGS_DIR)
 
-
 plot_alignment_weights_activity_timestep(hs_proj_class, types_set, FIGS_DIR)
 
 print('Compute components of activity along weights SVs - all simulations separately')
@@ -223,17 +238,74 @@ print('Compute components of activity along weights SVs - all simulations separa
 plot_alignment_activity_trans(hs_proj_class, types_set, FIGS_DIR)
 
 hs_proj_class = defaultdict(list)
+# for rec_Vh, hs_class in zip(all_rec_Vhs, all_hs_class):
 for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
+# for rec_U, hs_class in zip(all_rec_Us, all_hs_class):
     for c, hs in hs_class.items():
         hs_proj_class[c].append(np.dot(hs, rec_Vh.T))
+        # hs_proj_class[c].append(np.dot(hs, rec_U))
 hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, seq, N)
 
 plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_DIR)
 
-print('Cosine similarity')
+print('Plot cosine similarity and UM content')
 
-plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR)
+_hs_proj = hs_proj_class.transpose(1,2,0,3,4) # (class, sim, time, p, N) -> (sim, time, class, p, N,)
 
-# plot_UC()
+# subsample -- for faster devel
+ids = np.random.choice(_hs_proj.shape[-2], size=20, replace=False)
+_ids_classes = (_hs_proj.shape[-2]*np.arange(_hs_proj.shape[-3])[:,None]  + ids[None,:]).reshape(-1)
+_all_classes = [np.take(_classes, _ids_classes) for _classes in all_classes]
+_hs_proj = np.take(_hs_proj, ids, axis=-2)
 
+_shape = _hs_proj.shape
+_hs_proj = np.reshape(_hs_proj, (*_shape[:2], _shape[2]*_shape[3], _shape[4])) # (sim, time, class*samples, N,)
+
+plot_cosine_similarity(_hs_proj, _all_classes, FIGS_DIR)
+
+plot_UC(_hs_proj, types_set, _all_classes, DATA_DIR, FIGS_DIR)
+
+
+for _ablate_sv in [0,1,2]:
+
+    all_hs_ablatesv = [
+            np.array([
+                d[_ablate_sv] for k, d in res['HiddenAct'].items() if token_to_set[k] == par.whichset]
+                ).transpose((1,0,2))
+            for res in all_results_ablatesv
+        ]    # hidden act (n_epochs_saved, L, n_seq, n_hidden,) -- convenient for SVD
+
+    all_hs_ablatesv_class = [{c: np.take(h, np.where(classes==c)[0], axis=1) for c in unique_classes} for h, classes in zip(all_hs_ablatesv, all_classes)]
+
+
+    FIGS_DIR_ablate = join(par.folder, 'figs', folder_name, 'ablatesv', f'{_ablate_sv}')
+    os.makedirs(FIGS_DIR_ablate, exist_ok=True)
+
+    hs_ablatesv_proj_class = defaultdict(list)
+    # for rec_Vh, hs_class in zip(all_rec_Vhs, all_hs_ablatesv_class):
+    for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_ablatesv_class):
+    # for rec_U, hs_class in zip(all_rec_Us, all_hs_ablatesv_class):
+        for c, hs in hs_class.items():
+            hs_ablatesv_proj_class[c].append(np.dot(hs, rec_Vh.T))
+            # hs_ablatesv_proj_class[c].append(np.dot(hs, rec_U))
+    hs_ablatesv_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_ablatesv_proj_class.items()]) # (class, sims, time, seq, N)
+
+    plot_alignment_weights_activity_times_allseq(hs_ablatesv_proj_class, types_set, FIGS_DIR_ablate)
+
+    print('Plot cosine similarity and UM content')
+
+    _hs_proj = hs_ablatesv_proj_class.transpose(1,2,0,3,4) # (class, sim, time, p, N) -> (sim, time, class, p, N,)
+
+    # subsample -- for faster devel
+    ids = np.random.choice(_hs_proj.shape[-2], size=20, replace=False)
+    _ids_classes = (_hs_proj.shape[-2]*np.arange(_hs_proj.shape[-3])[:,None]  + ids[None,:]).reshape(-1)
+    _all_classes = [np.take(_classes, _ids_classes) for _classes in all_classes]
+    _hs_proj = np.take(_hs_proj, ids, axis=-2)
+
+    _shape = _hs_proj.shape
+    _hs_proj = np.reshape(_hs_proj, (*_shape[:2], _shape[2]*_shape[3], _shape[4])) # (sim, time, class*samples, N,)
+
+    plot_cosine_similarity(_hs_proj, _all_classes, FIGS_DIR_ablate)
+
+    plot_UC(_hs_proj, types_set, _all_classes, DATA_DIR,FIGS_DIR_ablate)
 
