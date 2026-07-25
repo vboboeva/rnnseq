@@ -71,6 +71,37 @@ def dimension (VE, threshold=.8):
     dimensions = np.argmax(above_threshold, axis=-1) + 1
     return dimensions
 
+def compute_dimensionality (all_hs, all_classes, all_Rs, threshold=.8):
+    '''
+    
+    '''
+    unique_classes = np.unique(all_classes[0])
+
+    all_hs_class = [{c: np.take(h, np.where(classes==c)[0], axis=2)[-1] for c in unique_classes} for h, classes in zip(all_hs, all_classes)]
+
+    all_SVDs_class = [{c: np.linalg.svd(h)[1:] for c, h in h_class.items()} for h_class in all_hs_class]
+
+    all_VEs_class = [{c: np.cumsum(SVDs[0]**2, axis=-1)/np.sum(SVDs[0]**2, axis=-1)[:,None] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
+
+    all_Vhs_class = [{c: SVDs[1] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
+
+    all_Vhs_class_proj= [{c: Vh_class @ R.T for c, Vh_class in Vhs_class.items()} for Vhs_class, R in zip(all_Vhs_class, all_Rs)]
+
+    all_SVDs = [np.linalg.svd(h[-1])[1:] for h in all_hs] # h[-1] for the end of training
+    all_VEs = np.array([np.cumsum(S**2, axis=1)/np.sum(S**2, axis=1)[:, None] for S, _ in all_SVDs])
+    # all_Vhs = [Vh for _, Vh in all_SVDs]    
+
+    # plot all fraction of variance explained by class
+    VE_class = defaultdict(list)
+    for VEs_class in all_VEs_class:
+        for c, VEs in VEs_class.items():
+            VE_class[c].append(VEs)
+    Ds_class = {c: dimension(np.stack(VE), threshold) for c, VE in VE_class.items()}
+
+    all_Ds = dimension(all_VEs, threshold)
+
+    return all_Ds, Ds_class
+
 def compute_cosine_similarity (X):
     '''
     X: ndarray (..., p, D)
