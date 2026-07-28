@@ -14,7 +14,6 @@ import pickle
 # from make_data import make_data
 from sklearn.decomposition import PCA
 from collections import defaultdict
-from colorstrings import CYAN_STR, RED_STR, END_STR
 from lowrank_utils import * #plot_mean_loss, align_singular_vectors, plot_SVD_results, plot_SVDs_dimensionality_all, plot_recurrent_weights, plot_all_weights, dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
 
 
@@ -110,13 +109,19 @@ all_rec_Us = [U for U, _, _ in all_rec_SVDs]
 all_rec_Ss = [S for _, S, _ in all_rec_SVDs]
 all_rec_Vhs = [Vh for _, _, Vh in all_rec_SVDs]
 
+_rank = 3
+all_rec_weights_lr = [U[:,:_rank] @ (S[:_rank] * np.eye(_rank)) @ Vh[:_rank]
+                      for U, S, Vh in all_rec_SVDs
+                      ]
+
 # SVD at final time step
-all_final_hs = [h[_epoch_time_ids] for h in all_hs]   # hidden act after training at last time step, at the 4th saved snapshot, (n_sim, n_seq, n_hidden,)
+all_final_hs = [h[_epoch_time_ids] for h in all_hs] # hidden act after training at last time step, at the 4th saved snapshot, (n_sim, n_seq, n_hidden,)
 # all_final_hs = [h[-1,-1] for h in all_hs]   # hidden act after training at last time step, at the end of training, (n_sim, n_seq, n_hidden,)
 # all_final_hs = [h[-1,-1] - np.mean(h[-1,-1], axis=0)[None,:] for h in all_hs]   # hidden act after training at last time step, (n_seq, n_hidden,) minus mean
 _SVDs = [np.linalg.svd(h) for h in all_final_hs]
 all_final_VEs = [np.cumsum(S**2)/np.sum(S**2) for _, S, _ in _SVDs]   # fraction of variance explained by first principal components
-all_final_Vhs = [Vh for _, _, Vh in _SVDs]    # principal vectors, component (1st index) by feature (2nd index)
+all_final_Vhs = [Vh for _, _, Vh in _SVDs]    # (right) principal vectors, component (1st index) by feature (2nd index)
+all_final_Us = [U for U, _, _ in _SVDs]       # (left) principal vectors, component (1st index) by feature (2nd index)
 
 # define rotation matrices
 if par.common_rotation == 'weights':
@@ -133,13 +138,18 @@ all_refs = [hs[0] for hs in all_final_hs] # (n_sim, n_hidden)
 # find the orthogonal transformation that rotates all the final hs to be aligned with each other
 print(f"Rotations using {par.common_rotation} SVs")
 
-all_rec_Vhs_aligned = align_singular_vectors(all_rec_Vhs, all_refs, n_components=10)
 all_Rs = align_singular_vectors(_all_Rs, all_refs, n_components=10)
+
+all_rec_Vhs_aligned = align_singular_vectors(all_rec_Vhs, all_refs, n_components=10)
+all_rec_Us_aligned = align_singular_vectors(all_rec_Us, all_refs, n_components=10)
+
+all_rec_Vh_dot_U = [np.matmul(Vh, U) for U, Vh in zip(all_rec_Us, all_rec_Vhs)]
 
 # Transforming the weights in each simulation using Vh brings them all close
 all_output_weights_proj = [W @ R.T for R, W in zip(all_Rs, all_output_weights)] # (C, N) x (N, N)
 all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     # (N, N) x (N, a)
 all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
+all_rec_weights_proj_lr = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights_lr)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
 make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
@@ -152,6 +162,8 @@ all_hs_proj = [np.dot(h, R.T) for h, R in zip(all_hs, all_Rs)]
 all_final_hs_proj = [h[_epoch_time_ids] for h in all_hs_proj]
 
 plot_SVD_results(all_final_VEs, all_final_hs_proj, all_Rs, FIGS_DIR, n_components=6, cmap='bwr')
+
+plot_alignment_SVs (all_rec_Vh_dot_U, FIGS_DIR)
 
 # Dimensionality reduces over time for any given class
 print('Compute and plot dimensionality over time')
@@ -173,7 +185,11 @@ print('Plot weights -- their SVDs')
 # all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
 # all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
+plot_SVDs_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR, label='Recurrent')
+
+plot_SVDs_weights(all_input_weights, all_input_weights_proj, FIGS_DIR, label='Input')
+
+plot_SVDs_weights(all_output_weights, all_output_weights_proj, FIGS_DIR, label='Output')
 
 print('Plot recurrent weights')
 
@@ -183,7 +199,6 @@ print('Plot all weights')
 
 plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, FIGS_DIR)
 
-
 #
 #   ALIGNMENT ANALYSIS
 #
@@ -191,6 +206,7 @@ plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_weight
 # with the modes of the recurrent weights (cosine similarity between principal vectors)
 # This is done after rotating activities and weights using the common transformation
 # identified at the last time step.
+
 print('Compute components of activity along weights SVs - mean over sequences by class')
 
 n_components = 4
@@ -202,23 +218,22 @@ hs_proj_class = defaultdict(list)
 for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
     for c, hs in hs_class.items():
         hs_proj_class[c].append(np.mean(np.dot(hs, rec_Vh.T), axis=1))
-hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sim, time, p, N)
+hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sim, time, N)
 
 # hs_proj_class = defaultdict(list)
 # for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
 #     for c, hs in hs_class.items():
 #         hs_proj_class[c].append(np.dot(hs, rec_Vh.T))
-# hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, seq, N)
-# hs_proj_class = np.mean(hs_proj_class, axis=1) # (class, time, seq, N)    
+# hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, p, N)
+# hs_proj_class = np.mean(hs_proj_class, axis=1) # (class, time, p, N)    
 # one plot for each time step
 
 plot_alignment_weights_activity_class(hs_proj_class, types_set, FIGS_DIR)
 
-
 plot_alignment_weights_activity_timestep(hs_proj_class, types_set, FIGS_DIR)
 
-print('Compute components of activity along weights SVs - all simulations separately')
 
+print('Compute components of activity along weights SVs - all simulations separately')
 
 plot_alignment_activity_trans(hs_proj_class, types_set, FIGS_DIR)
 
@@ -226,14 +241,25 @@ hs_proj_class = defaultdict(list)
 for rec_Vh, hs_class in zip(all_rec_Vhs_aligned, all_hs_class):
     for c, hs in hs_class.items():
         hs_proj_class[c].append(np.dot(hs, rec_Vh.T))
-hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, seq, N)
+hs_proj_class = np.stack([np.array(hs_proj) for c, hs_proj in hs_proj_class.items()]) # (class, sims, time, p, N)
 
 plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_DIR)
 
-print('Cosine similarity')
+print('Plot cosine similarity and UM content')
 
-plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR)
+_hs_proj = hs_proj_class.transpose(1,2,0,3,4) # (class, sim, time, p, N) -> (sim, time, class, p, N,)
 
-# plot_UC()
+# subsample -- for faster devel
+ids = np.random.choice(_hs_proj.shape[-2], size=20, replace=False)
+_ids_classes = (_hs_proj.shape[-2]*np.arange(_hs_proj.shape[-3])[:,None]  + ids[None,:]).reshape(-1)
+_all_classes = [np.take(_classes, _ids_classes) for _classes in all_classes]
+_hs_proj = np.take(_hs_proj, ids, axis=-2)
+
+_shape = _hs_proj.shape
+_hs_proj = np.reshape(_hs_proj, (*_shape[:2], _shape[2]*_shape[3], _shape[4])) # (sim, time, class*samples, N,)
+
+plot_cosine_similarity(_hs_proj, _all_classes, FIGS_DIR)
+
+plot_UC(_hs_proj, types_set, _all_classes, DATA_DIR, FIGS_DIR)
 
 
