@@ -14,7 +14,7 @@ import pickle
 # from make_data import make_data
 from sklearn.decomposition import PCA
 from collections import defaultdict
-from colorstrings import CYAN_STR, RED_STR, END_STR
+import colorstrings as cs
 from analysis_utils import dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
 
 def make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR):
@@ -25,10 +25,10 @@ def make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_outpu
     mean_all_rec_biases_proj = np.mean(all_rec_biases_proj, axis=0)
 
     # # Recreating a "filtered" version of the weights by rotating "back" the average low-rank
-    # all_output_weights_filtered = [mean_all_output_weights_proj @ R for R in all_Rs]
-    # all_input_weights_filtered = [R.T @ mean_all_input_weights_proj for R in all_Rs]
+    all_output_weights_filtered = [mean_all_output_weights_proj @ R for R in all_Rs]
+    all_input_weights_filtered = [R.T @ mean_all_input_weights_proj for R in all_Rs]
     all_rec_weights_filtered = [R.T @ mean_all_rec_weights_proj @ R for R in all_Rs]
-    # all_rec_biases_filtered = [R.T @ mean_all_rec_biases_proj for R in all_Rs]
+    all_rec_biases_filtered = [R.T @ mean_all_rec_biases_proj for R in all_Rs]
 
     # # Recreate all recurrent weight matrices with the average spectrum (show that mean can support task)
     # # 1. Define the diagonal matrix with the spectrum of the average (rotated) weights
@@ -54,12 +54,11 @@ def make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_outpu
         torch.save(model_dict, join(DATA_DIR, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}.pth'))
         # torch.save(model_dict, join(DATA_DIR, f'model_state_filtered_classcomb{par.classcomb}_sim{sim_id}_epoch{_epoch}.pth'))
 
-
 def plot_mean_loss(all_results, FIGS_DIR):
 
     all_losses = [np.array([[l for _, l in loss.items()] for _, loss in res['Loss'].items()]) for res in all_results]
     print('Plot loss')
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(3,1.5))
     for loss in all_losses:
         ax.plot(np.mean(loss, axis=0), lw=.2, c='k', alpha=.2)
     ax.plot(np.mean(np.mean(all_losses,axis=0),axis=0), lw=2, c='r', ls='--')
@@ -202,7 +201,7 @@ def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs,types_set, FIGS_DI
     plt.close(fig)
 
 
-def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
+def plot_SVDs_weights(all_weights, all_weights_proj, FIGS_DIR, label='None'):
     #
     # Labels with main text notation
     #
@@ -210,12 +209,12 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     # all SVDs are the same across simulations -- whether we rotate or not
     # but the SVDs of the average matrices are going to be very different
 
-    all_rec_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights_proj]
-    all_rec_S = [np.linalg.svd(W, compute_uv=False) for W in all_rec_weights]
+    all_S_proj = [np.linalg.svd(W, compute_uv=False) for W in all_weights_proj]
+    all_S = [np.linalg.svd(W, compute_uv=False) for W in all_weights]
 
     fig, ax = plt.subplots(figsize=(3,1.6))
-    n_components = 15
-    _xticks = [0,5,10,15]
+    n_components = min(10, len(np.mean(all_S, axis=0)))
+    _xticks = [0,5,10]
     _yticks = [0,4,8]
     ax.set_xlim(min(_xticks),max(_xticks))
     # ax.set_ylim(min(_yticks),max(_yticks))
@@ -224,25 +223,26 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.set_xticklabels([str(t) for t in _xticks])
     # ax.set_yticklabels([str(t) for t in _yticks])
     ax.axvspan(0, 3.5, color='wheat', alpha=0.5, lw=0)
-    # for S_proj, S in zip(all_rec_S_proj,all_rec_S):
+    # for S_proj, S in zip(all_S_proj,all_S):
     #     ax.plot(np.arange(n_components)+1, S[:n_components], c='b', lw=.1, alpha=.2)
-    ax.plot(np.arange(n_components)+1, np.mean(all_rec_S,axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
+    ax.plot(np.arange(n_components)+1, np.mean(all_S,axis=0)[:n_components], ls='--', c='b', lw=2, label='av S orig')
+
     ax.fill_between(np.arange(n_components)+1,
-                    np.percentile(all_rec_S,5,axis=0)[:n_components],
-                    np.percentile(all_rec_S,95,axis=0)[:n_components],
+                    np.percentile(all_S,5,axis=0)[:n_components],
+                    np.percentile(all_S,95,axis=0)[:n_components],
                     ls='--', color='b', lw=0, alpha=.2, label='av S orig')
-    # ax.plot(np.arange(n_components)+1, np.mean(all_rec_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
-    S_mean = np.linalg.svd(np.mean(all_rec_weights, axis=0), compute_uv=False)
-    S_mean_proj = np.linalg.svd(np.mean(all_rec_weights_proj, axis=0), compute_uv=False)
-    ax.plot(np.arange(n_components)+1,S_mean[:n_components], c='b', lw=1, marker='o', markersize=3, label='S av orig')
-    ax.plot(np.arange(n_components)+1,S_mean_proj[:n_components], c='r', lw=1, marker='o', markersize=3, label='S av rot')
+    # ax.plot(np.arange(n_components)+1, np.mean(all_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
+    S_mean = np.linalg.svd(np.mean(all_weights, axis=0), compute_uv=False)
+    S_mean_proj = np.linalg.svd(np.mean(all_weights_proj, axis=0), compute_uv=False)
+    ax.plot(np.arange(n_components)+1, S_mean[:n_components], c='b', lw=1, ls='dotted', markersize=3, label='S av orig')
+    ax.plot(np.arange(n_components)+1, S_mean_proj[:n_components], c='r', lw=1, marker='o', markersize=3, label='S av rot')
     # ax.set_ylim(.1,10)
     # ax.set_yscale('log')
     # ax.set_xlabel("Index")
     ax.set_ylabel("Singular value")
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     fig.tight_layout()
-    fig.savefig(join(FIGS_DIR, f'SVDs_recurrent_weights.svg'), dpi=300)
+    fig.savefig(join(FIGS_DIR, f'SVDs_weights_{label}.svg'), dpi=300)
     plt.close(fig)
 
 def plot_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
@@ -282,7 +282,7 @@ def plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_we
     _X = np.stack([_w[:n_components].ravel() for _w in _weights])
     # _vmax = np.max(np.fabs([np.max(_X), np.min(_X)]))
     # _vmin = - _vmax
-    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG') #vmin=_vmin, vmax=_vmax, 
+    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG', vmin=-4, vmax=4) #vmin=_vmin, vmax=_vmax, 
     for i in range(1, n_components):
         ax.axvline(i * _weights[0].shape[1] - .5, ls='--', c='k')
     fig.colorbar(im, ax=ax)
@@ -298,7 +298,7 @@ def plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_we
     _X = np.stack([_w[:n_components,:n_components].ravel() for _w in _weights])
     # _vmax = np.max(np.fabs([np.max(_X), np.min(_X)]))
     # _vmin = - _vmax
-    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG') #vmin=_vmin, vmax=_vmax, 
+    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG', vmin=-4, vmax=4) #vmin=_vmin, vmax=_vmax, 
     for i in range(1, n_components):
         ax.axvline(i * n_components - .5, ls='--', c='k')
     fig.colorbar(im, ax=ax)
@@ -312,9 +312,9 @@ def plot_all_weights(all_input_weights_proj, all_rec_weights_proj, all_output_we
     # ax.set_xlabel(f"First {n_components} cols")
     ax.set_ylabel("Simulation ID")
     _X = np.stack([_w.T[:n_components].ravel() for _w in _weights])
-    # _vmax = np.max(np.fabs([np.max(_X), np.min(_X)]))
-    # _vmin = - _vmax
-    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG') #vmin=_vmin, vmax=_vmax, 
+    _vmax = np.max(np.fabs([np.max(_X), np.min(_X)]))
+    _vmin = - _vmax
+    im = ax.imshow(_X, aspect='auto', interpolation='nearest', cmap='PiYG', vmin=-4, vmax=4)
     for i in range(1, n_components):
         ax.axvline(i * _weights[0].shape[0] - .5, ls='--', c='k')
     fig.colorbar(im, ax=ax)
@@ -415,17 +415,7 @@ def plot_alignment_weights_activity_times_allseq(hs_proj_class, types_set, FIGS_
         fig.savefig(join(FIGS_DIR, f'alignment_weights-activity_times_allseq.svg'), dpi=300)
         plt.close(fig)
 
-def plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR):
-    _hs_proj = hs_proj_class.transpose(1,2,0,3,4) # (class, sim, time, p, N) -> (sim, time, class, p, N,)
-
-    # subsample -- for faster devel
-    ids = np.random.choice(_hs_proj.shape[-2], size=20, replace=False)
-    _ids_classes = (_hs_proj.shape[-2]*np.arange(_hs_proj.shape[-3])[:,None]  + ids[None,:]).reshape(-1)
-    _all_classes = [np.take(_classes, _ids_classes) for _classes in all_classes]
-    _hs_proj = np.take(_hs_proj, ids, axis=-2)
-
-    _shape = _hs_proj.shape
-    _hs_proj = np.reshape(_hs_proj, (*_shape[:2], _shape[2]*_shape[3], _shape[4]))
+def plot_cosine_similarity(_hs_proj, _all_classes, FIGS_DIR):
 
     # plot cosine similarity of few simulations
     hs = _hs_proj[0]
@@ -440,7 +430,7 @@ def plot_cosine_similarity(hs_proj_class, all_classes, FIGS_DIR):
     fig.savefig(join(FIGS_DIR, f'cosine_similarity.svg'), dpi=300)
     plt.close(fig)
 
-def plot_UC():
+def plot_UC(_hs_proj, types_set, _all_classes, DATA_DIR, FIGS_DIR):
     # Ultrametricity over time
 
     if par.compute_uc:
@@ -455,12 +445,14 @@ def plot_UC():
         print('Ultra-metric content over time for all sequences')
         all_UCs = defaultdict(dict)
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             for _t in range(_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 all_UCs[_n][_t] = [compute_umcontent(distance_f(hs[None,_t,:,:_n]), return_triplets=False)[0] for hs in _hs_proj[:10]]
         with open(join(DATA_DIR, 'ultrametric_content_all.pkl'), 'wb') as f:
             pickle.dump(to_dict(all_UCs), f)
+
+            # sim, time, sequence, N
 
 
         print('Ultra-metric content over time by class')
@@ -468,11 +460,11 @@ def plot_UC():
         # (this should be a lower bound to the ultrametric content for all the sequences together)
         all_UCs_class = defaultdict(lambda: defaultdict(dict))
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             # (for t=0 the sequence 1 element, and all sequences would be considered together;
             # we start from t=1)
             for _t in range(1,_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 types_seq = np.take([c[:_t+1] for c in types_set], _all_classes[0])
                 for _c in np.unique(types_seq):
                     print(_c)
@@ -486,11 +478,11 @@ def plot_UC():
         # at time t we look for the groups of sequences that share the structure up to time t-1
         all_UCs_group = defaultdict(lambda: defaultdict(dict))
         for _n in [2,3,4,6,8,10,160]:
-            print(RED_STR + f"{_n}" + END_STR)
+            print(cs.RED + f"{_n}" + cs.END)
             # (for t=0,1 the preceding part of the sequence is either empty or has 1 element,
             # so all sequences would be considered together; we start from t=2)
             for _t in range(2,_hs_proj[0].shape[0]):
-                print(CYAN_STR + f"{_t}" + END_STR)
+                print(cs.CYAN + f"{_t}" + cs.END)
                 types_seq = np.take([c[:_t] for c in types_set], _all_classes[0])
                 for _c in np.unique(types_seq):
                     print(_c)
