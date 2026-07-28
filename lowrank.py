@@ -14,7 +14,6 @@ import pickle
 # from make_data import make_data
 from sklearn.decomposition import PCA
 from collections import defaultdict
-from colorstrings import CYAN_STR, RED_STR, END_STR
 from lowrank_utils import * #plot_mean_loss, align_singular_vectors, plot_SVD_results, plot_SVDs_dimensionality_all, plot_recurrent_weights, plot_all_weights, dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
 
 
@@ -139,13 +138,18 @@ all_refs = [hs[0] for hs in all_final_hs] # (n_sim, n_hidden)
 # find the orthogonal transformation that rotates all the final hs to be aligned with each other
 print(f"Rotations using {par.common_rotation} SVs")
 
-all_rec_Vhs_aligned = align_singular_vectors(all_rec_Vhs, all_refs, n_components=10)
 all_Rs = align_singular_vectors(_all_Rs, all_refs, n_components=10)
+
+all_rec_Vhs_aligned = align_singular_vectors(all_rec_Vhs, all_refs, n_components=10)
+all_rec_Us_aligned = align_singular_vectors(all_rec_Us, all_refs, n_components=10)
+
+all_rec_Vh_dot_U = [np.matmul(Vh, U) for U, Vh in zip(all_rec_Us, all_rec_Vhs)]
 
 # Transforming the weights in each simulation using Vh brings them all close
 all_output_weights_proj = [W @ R.T for R, W in zip(all_Rs, all_output_weights)] # (C, N) x (N, N)
 all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     # (N, N) x (N, a)
 all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
+all_rec_weights_proj_lr = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights_lr)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
 make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
@@ -158,6 +162,8 @@ all_hs_proj = [np.dot(h, R.T) for h, R in zip(all_hs, all_Rs)]
 all_final_hs_proj = [h[_epoch_time_ids] for h in all_hs_proj]
 
 plot_SVD_results(all_final_VEs, all_final_hs_proj, all_Rs, FIGS_DIR, n_components=6, cmap='bwr')
+
+plot_alignment_SVs (all_rec_Vh_dot_U, FIGS_DIR)
 
 # Dimensionality reduces over time for any given class
 print('Compute and plot dimensionality over time')
