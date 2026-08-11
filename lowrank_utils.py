@@ -148,19 +148,20 @@ def plot_SVD_results (all_VEs, all_hs_proj, all_Vhs, FIGS_DIR, n_components=2, *
 def plot_alignment_SVs (all_rec_Vh_dot_U, FIGS_DIR):
     fig, axs = plt.subplots(1,2, figsize=(6,3))
     ax = axs[0]
-    ax.set_title("Mean V.U")
+    ax.set_title("Sample V.U")
+    sample_id = 1
     n_components=20
-    _X = all_rec_Vh_dot_U[1][:n_components,:n_components]
+    _X = all_rec_Vh_dot_U[sample_id][:n_components,:n_components]
     # _X = np.mean(all_rec_Vh_dot_U,axis=0)[:n_components,:n_components]
     _vmax = np.max(np.fabs([np.max(_X), np.min(_X)]))
     _vmin = - _vmax
     ax.set_ylabel("V id")
     ax.set_xlabel("U id")
-    im = ax.imshow(_X[:20,:20], aspect='equal', interpolation='nearest', cmap='PiYG', vmin=_vmin, vmax=_vmax)
+    im = ax.imshow(_X, aspect='equal', interpolation='nearest', cmap='PiYG', vmin=_vmin, vmax=_vmax)
     fig.colorbar(im, ax=ax)
 
     ax = axs[1]
-    ax.set_title("All V.U")
+    ax.set_title("All V.U, flattened")
     n_components = 5
     n_simulations = 100
     ax.set_ylabel("Simulation ID")
