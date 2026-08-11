@@ -159,7 +159,6 @@ all_rec_delta_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_delta_
 all_rec_weights_proj_lr = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights_lr)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
-make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR)
 
 ############### ANALYSIS OF HIDDEN-LAYER ACTIVITY ###############################################
 
