@@ -16,6 +16,7 @@ from sklearn.decomposition import PCA
 from collections import defaultdict
 import colorstrings as cs
 from analysis_utils import dimension, compute_umcontent, compute_cosine_similarity, compute_distance, to_dict
+from tier_diagnostics import analyse_real_simulations
 
 def make_save_mean_model(all_input_weights_proj, all_rec_weights_proj, all_output_weights_proj, all_rec_biases_proj, all_Rs, all_rec_Us, all_rec_Vhs, all_input_weights, all_output_weights, all_rec_biases, all_out_biases, DATA_DIR):
     # Compute average transformed weights across simulations

@@ -127,6 +127,8 @@ all_final_VEs = [np.cumsum(S**2)/np.sum(S**2) for _, S, _ in _SVDs]   # fraction
 all_final_Vhs = [Vh for _, _, Vh in _SVDs]    # (right) principal vectors, component (1st index) by feature (2nd index)
 all_final_Us = [U for U, _, _ in _SVDs]       # (left) principal vectors, component (1st index) by feature (2nd index)
 
+analyse_real_simulations(all_final_hs, all_rec_weights, R_report=3, fname=join(FIGS_DIR,"activity_degeneracy_diagnostic.png"))
+
 # define rotation matrices
 if par.common_rotation == 'weights':
     _all_Rs = all_rec_Vhs
