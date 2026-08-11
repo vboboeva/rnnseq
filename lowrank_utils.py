@@ -66,16 +66,21 @@ def plot_mean_loss(all_results, FIGS_DIR):
     fig.savefig(join(FIGS_DIR, f'loss_training.svg'), dpi=300)
     plt.close(fig)
 
-def align_singular_vectors(all_Rs, all_refs, n_components=2):
+def align_singular_vectors(all_Rs, all_refs, n_components=2, return_signs=False):
     all_Rs_aligned = []
-    for R, r in zip(all_Rs, all_refs):
+    signs = np.ones((len(all_Rs),len(all_Rs[0])), dtype=int)
+    for sim, (R, r) in enumerate(zip(all_Rs, all_refs)):
         _R = R.copy()
         for n, v in enumerate(R[:n_components]):
             if np.dot(v, r) < 0:
                 _R[n] = - v
+                if return_signs:
+                    signs[sim,n] = -1
             else:
                 _R[n] = v
         all_Rs_aligned.append(_R)
+    if return_signs:
+        return all_Rs_aligned, signs
     return all_Rs_aligned
 
 
