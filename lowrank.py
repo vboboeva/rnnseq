@@ -50,12 +50,11 @@ def get_all_sims_paths (folder_name):
     Get all simulation paths for a given folder name.
     """
     model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
-    # model_paths = sorted(glob(join(DATA_DIR, f'model_state_classcomb{par.classcomb}_sim*.pth')))
+    model_init_paths = sorted(glob(join(DATA_DIR, f'model_state_init_classcomb{par.classcomb}_sim*.pth')))
     results_paths = sorted(glob(join(DATA_DIR, f'results_task{par.task}_classcomb{par.classcomb}_sim*.pkl')))
-    return model_paths, results_paths
+    return model_paths, model_init_paths, results_paths
 
-
-model_paths, results_paths = get_all_sims_paths(folder_name)
+model_paths, model_init_paths, results_paths = get_all_sims_paths(folder_name)
 
 # for i, path in enumerate(model_paths):
 #     print(f"{str(i):<5}{path}")
@@ -63,9 +62,9 @@ model_paths, results_paths = get_all_sims_paths(folder_name)
 #     print(f"{str(i):<5}{path}")
 mean_model_path = join(DATA_DIR, f'model_state_classcomb{par.classcomb}_mean.pth')
 
-
 print('Load all results')
 all_models = [torch.load(path, map_location="cpu") for path in model_paths]
+all_models_init = [torch.load(path, map_location="cpu") for path in model_init_paths]
 all_results = [pickle.load(open(path, 'rb')) for path in results_paths]
 
 assert len(all_results) and len(all_models), "Empty results..."
@@ -78,7 +77,6 @@ os.makedirs(FIGS_DIR, exist_ok=True)
 
 plot_mean_loss(all_results, FIGS_DIR)
 
-
 # 0. Extract some info about results -- all lists indexed by simulation
 print(f'Extract activity -- only sequences in {par.whichset} set')
 all_sequences = [np.array([token_to_type[k] for k in res['HiddenAct'].keys() if token_to_set[k] == par.whichset]) #np.array(list(res['HiddenAct'].keys()))
@@ -90,9 +88,15 @@ all_hs = [np.array([list(d.values()) for k, d in res['HiddenAct'].items() if tok
 
 print(f'Extract weights')
 # extract all weights
-all_input_weights = [m['i2h.weight'].numpy() for m in all_models]
-all_output_weights = [m['h2o.weight'].numpy() for m in all_models]
-all_rec_weights = [m['h2h.weight'].numpy() for m in all_models]
+if par.align_weight_deltas:
+    all_input_weights =  [m['i2h.weight'].numpy() - m0['i2h.weight'].numpy() for m, m0 in zip(all_models, all_models_init)]
+    all_output_weights = [m['h2o.weight'].numpy() - m0['h2o.weight'].numpy() for m, m0 in zip(all_models, all_models_init)]
+    all_rec_weights =    [m['h2h.weight'].numpy() - m0['h2h.weight'].numpy() for m, m0 in zip(all_models, all_models_init)]
+else:
+    all_input_weights =  [m['i2h.weight'].numpy() for m in all_models]
+    all_output_weights = [m['h2o.weight'].numpy() for m in all_models]
+    all_rec_weights =    [m['h2h.weight'].numpy() for m in all_models]
+
 
 # extract all biases (only those in the recurrent layer are supposed to be non-vanishing)
 all_rec_biases = [m['h2h.bias'].numpy() for m in all_models]
@@ -149,6 +153,7 @@ all_rec_Vh_dot_U = [np.matmul(Vh, U) for U, Vh in zip(all_rec_Us, all_rec_Vhs)]
 all_output_weights_proj = [W @ R.T for R, W in zip(all_Rs, all_output_weights)] # (C, N) x (N, N)
 all_input_weights_proj = [R @ W for R, W in zip(all_Rs, all_input_weights)]     # (N, N) x (N, a)
 all_rec_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights)]   # (N, N) x (N, N) x (N, N)
+all_rec_delta_weights_proj = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_delta_weights)]   # (N, N) x (N, N) x (N, N)
 all_rec_weights_proj_lr = [R @ W @ R.T for R, W in zip(all_Rs, all_rec_weights_lr)]   # (N, N) x (N, N) x (N, N)
 all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
@@ -186,6 +191,7 @@ print('Plot weights -- their SVDs')
 # all_rec_biases_proj = [R @ b for R, b in zip(all_Rs, all_rec_biases)]
 
 plot_SVDs_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR, label='Recurrent')
+plot_SVDs_weights(all_rec_delta_weights, all_rec_delta_weights_proj, FIGS_DIR, label='RecurrentDeltas')
 
 plot_SVDs_weights(all_input_weights, all_input_weights_proj, FIGS_DIR, label='Input')
 
