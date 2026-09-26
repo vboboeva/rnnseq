@@ -279,7 +279,7 @@ if __name__ == "__main__":
 		n_layers = 1, # number of RNN layers
 		n_latent = 10, # size of latent layer (autoencoder only!!)
 		m = 2, # number of unique letters in each sequence
-		task = 'RNNPred',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
+		task = 'RNNClass',  # choose btw 'RNNPred', 'RNNClass', RNNAuto', or 'RNNMulti'
 		k_steps=None,	# number of steps for the k-steps rollout (prediction only)
 		k_steps_scheduling=True,
 		objective = 'CE', # choose btw cross entr (CE) and mean sq error (MSE)
@@ -366,10 +366,12 @@ if __name__ == "__main__":
 
 		# size is the number of serial simulations running on a single node of the cluster, set this accordingly with the number of arrays in order to cover all parameters in the parameters.txt file
 		
+		n_rows = params.shape[0] if getattr(params, "ndim", 1) == 2 else 1
 		size = 100
 		for i in range(size):
 			row_index = index * size + i
-		# for split_id in range(40):
+			if row_index >= n_rows:
+				break
 
 			L = int(params[row_index, L_col_index])
 			n_types = int(params[row_index, n_types_col_index])
