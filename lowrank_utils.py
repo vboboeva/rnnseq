@@ -146,60 +146,179 @@ def plot_SVD_results (all_VEs, all_hs_proj, all_Vhs, FIGS_DIR, n_components=2, *
     fig.savefig(join(FIGS_DIR, f'hidden_last_step_coeffs.svg'), dpi=300)
     plt.close(fig)
 
-def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs,types_set, FIGS_DIR):
-    # for each class find the dimensionality of activity vs time (for each simulation)
-    # and plot box / mean+-std of dimensionality across simulations vs time
-    # (one curve for each class)
+def plot_SVDs_dimensionality_all(all_hs_class, all_Rs, all_hs, types_set, FIGS_DIR):
+    Ds_class, all_Ds = compute_SVDs_dimensionality(all_hs_class, all_Rs, all_hs)
+    fig, ax = plt.subplots(figsize=(2, 1.5))
+    plot_SVDs_dimensionality_on_ax(ax, Ds_class, all_Ds, types_set)
+    fig.tight_layout()
+    fig.savefig(join(FIGS_DIR, 'SVDs_and_dimensionality_all.svg'), dpi=300)
+    plt.close(fig)
 
+def compute_SVDs_dimensionality(all_hs_class, all_Rs, all_hs, frac_threshold=0.9):
     all_SVDs_class = [{c: np.linalg.svd(h)[1:] for c, h in h_class.items()} for h_class in all_hs_class]
-
-    all_VEs_class = [{c: np.cumsum(SVDs[0]**2, axis=-1)/np.sum(SVDs[0]**2, axis=-1)[:,None] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
-
-    all_Vhs_class = [{c: SVDs[1] for c, SVDs in SVDs_class.items()} for SVDs_class in all_SVDs_class]
-
-    all_Vhs_class_proj= [{c: Vh_class @ R.T for c, Vh_class in Vhs_class.items()} for Vhs_class, R in zip(all_Vhs_class, all_Rs)]
-
-    all_SVDs = [np.linalg.svd(h[-1])[1:] for h in all_hs] # h[-1] for the end of training
-    all_VEs = np.array([np.cumsum(S**2, axis=1)/np.sum(S**2, axis=1)[:, None] for S, _ in all_SVDs])
-    # all_Vhs = [Vh for _, Vh in all_SVDs]    
-
-    frac_threshold = .9
-
-    # plot all fraction of variance explained by class
+    all_VEs_class = [
+        {c: np.cumsum(SVDs[0]**2, axis=-1) / np.sum(SVDs[0]**2, axis=-1)[:, None]
+         for c, SVDs in SVDs_class.items()}
+        for SVDs_class in all_SVDs_class
+    ]
     VE_class = defaultdict(list)
     for VEs_class in all_VEs_class:
         for c, VEs in VEs_class.items():
             VE_class[c].append(VEs)
     Ds_class = {c: dimension(np.stack(VE), frac_threshold) for c, VE in VE_class.items()}
 
+    all_SVDs = [np.linalg.svd(h[-1])[1:] for h in all_hs]
+    all_VEs = np.array([np.cumsum(S**2, axis=1) / np.sum(S**2, axis=1)[:, None] for S, _ in all_SVDs])
     all_Ds = dimension(all_VEs, frac_threshold)
+    return Ds_class, all_Ds
 
-    fig, ax = plt.subplots(figsize=(2,1.5))
-    # plt.subplots_adjust(left=.2, right=.99, bottom=.2, top=.99)
-    # d_max = np.max(all_Ds)
-    d_max = 30
+
+def plot_SVDs_dimensionality_on_ax(ax, Ds_class, all_Ds, types_set):
     _high = np.percentile(all_Ds, 95, axis=0)
     _low = np.percentile(all_Ds, 5, axis=0)
-    # plot dimensionality all classes together
-    # ax.set_ylabel("Dimensionality")
-    # ax.set_xlabel("Timestep")
-    _xticks=list(np.arange(len(_high))+1)
+    _xticks = list(np.arange(len(_high)) + 1)
     ax.set_xticks(_xticks)
-    # ax.set_ylim([0, d_max])
-    ax.set_xlim(min(_xticks),max(_xticks))
-    ax.fill_between(np.arange(len(_high))+1, _low, _high, color='k', alpha=.3, lw=0)
+    ax.set_xlim(min(_xticks), max(_xticks))
+    ax.fill_between(np.arange(len(_high)) + 1, _low, _high, color='k', alpha=.3, lw=0)
     ax.plot(np.arange(len(_high)) + 1, np.median(all_Ds, axis=0), c='k', ls='--', lw=2, label='all')
-    # plot dimensionality all classes separately
     for i, (c, Ds) in enumerate(Ds_class.items()):
         _high = np.percentile(Ds, 95, axis=0)
         _low = np.percentile(Ds, 5, axis=0)
-        ax.fill_between(np.arange(len(_high))+1, _low, _high, color=f'C{i}', alpha=.2, lw=0)
-        ax.plot(np.arange(len(_high))+1, np.median(Ds, axis=0), c=f'C{i}', lw=2, label=types_set[c])
-    # ax.legend(loc='best', title='Class')
+        ax.fill_between(np.arange(len(_high)) + 1, _low, _high, color=f'C{i}', alpha=.2, lw=0)
+        ax.plot(np.arange(len(_high)) + 1, np.median(Ds, axis=0), c=f'C{i}', lw=2, label=types_set[c])
+
+def _load_dimensionality_for_classcomb(data_dir, classcomb_idx, epoch_time_ids=(-1, -1)):
+    """Load dimensionality curves for one class combination and all sim_ids."""
+    with open(join(data_dir, f'token_to_type_classcomb{classcomb_idx}.pkl'), 'rb') as handle:
+        token_to_type = pickle.load(handle)
+    with open(join(data_dir, f'token_to_set_classcomb{classcomb_idx}.pkl'), 'rb') as handle:
+        token_to_set = pickle.load(handle)
+
+    model_paths = sorted(glob(join(data_dir, f'model_state_classcomb{classcomb_idx}_sim*.pth')))
+    results_paths = sorted(glob(join(data_dir, f'results_task{par.task}_classcomb{classcomb_idx}_sim*.pkl')))
+    if not model_paths or not results_paths:
+        return None
+    assert len(model_paths) == len(results_paths), f"Length mismatch for classcomb {classcomb_idx}"
+
+    all_models = [torch.load(path, map_location="cpu") for path in model_paths]
+    all_results = [pickle.load(open(path, 'rb')) for path in results_paths]
+
+    all_classes = [
+        np.array([token_to_type[k] for k in res['HiddenAct'].keys() if token_to_set[k] == par.whichset])
+        for res in all_results
+    ]
+    all_hs = [
+        np.array([
+            list(d.values()) for k, d in res['HiddenAct'].items() if token_to_set[k] == par.whichset
+        ]).transpose((1, 2, 0, 3))
+        for res in all_results
+    ]
+
+    all_rec_weights = [m['h2h.weight'].numpy() for m in all_models]
+    all_rec_Vhs = [np.linalg.svd(W)[2] for W in all_rec_weights]
+
+    all_final_hs = [h[epoch_time_ids] for h in all_hs]
+    all_final_Vhs = [np.linalg.svd(h)[2] for h in all_final_hs]
+
+    if par.common_rotation == 'weights':
+        _all_Rs = all_rec_Vhs
+    elif par.common_rotation == 'hidden':
+        _all_Rs = all_final_Vhs
+    else:
+        raise NotImplementedError(f'Unknown option "{par.common_rotation}" for `common_rotation`.')
+
+    all_refs = [hs[0] for hs in all_final_hs]
+    all_Rs = align_singular_vectors(_all_Rs, all_refs, n_components=10)
+
+    unique_classes = np.unique(all_classes[0])
+    all_hs_class = [
+        {c: np.take(h, np.where(classes == c)[0], axis=2)[-1] for c in unique_classes}
+        for h, classes in zip(all_hs, all_classes)
+    ]
+
+    return compute_SVDs_dimensionality(all_hs_class, all_Rs, all_hs)
+
+
+def load_dimensionality_panel_data(L, epoch_time_ids=(-1, -1)):
+    """Load one trained run and return dimensionality curves for a side-by-side panel."""
+    folder_name = par.run_folder_name(L=L)
+    data_dir = join(par.folder, folder_name)
+
+    with open(join(data_dir, 'classes.pkl'), 'rb') as handle:
+        classcomb = pickle.load(handle)
+    types_set = list(classcomb[par.classcomb])
+
+    result = _load_dimensionality_for_classcomb(data_dir, par.classcomb, epoch_time_ids)
+    assert result is not None, f"No simulation files found for L={L}"
+    Ds_class, all_Ds = result
+    return Ds_class, all_Ds, types_set
+
+
+def plot_SVDs_dimensionality_L_range(L_panel_data, L_values, figs_dir,
+                                     filename='SVDs_and_dimensionality_L_range.svg',
+                                     ncols=2):
+    """Plot dimensionality curves for multiple L values in a grid (default 2 per row).
+
+    Each panel gets its own legend because class labels differ across L.
+    """
+    n = len(L_values)
+    nrows = int(np.ceil(n / ncols))
+    fig, axs = plt.subplots(nrows, ncols, figsize=(4.2 * ncols, 2.2 * nrows), sharey=True)
+    axs = np.atleast_1d(axs).ravel()
+    for ax, L, (Ds_class, all_Ds, types_set) in zip(axs, L_values, L_panel_data):
+        plot_SVDs_dimensionality_on_ax(ax, Ds_class, all_Ds, types_set)
+        ax.set_title(f'L={L}  (classcomb={par.classcomb}, {len(types_set)} classes)')
+        ax.legend(fontsize=5, loc='center left', bbox_to_anchor=(1.02, 0.5), frameon=False)
+    for ax in axs[n:]:
+        ax.set_visible(False)
     fig.tight_layout()
-    # fig.savefig(join(FIGS_DIR, f'SVDs_and_dimensionality_by_class.svg'), dpi=300)
-    fig.savefig(join(FIGS_DIR, f'SVDs_and_dimensionality_all.svg'), dpi=300)
+    os.makedirs(figs_dir, exist_ok=True)
+    fig.savefig(join(figs_dir, filename), dpi=300, bbox_inches='tight')
     plt.close(fig)
+
+
+def L_values_from_parameters(path='parameters.txt'):
+    """Unique suffix lengths L from the first column of parameters.txt, sorted."""
+    params = np.loadtxt(path)
+    if params.ndim == 1:
+        params = params.reshape(1, -1)
+    return np.unique(params[:, 0].astype(int)).tolist()
+
+
+def plot_SVDs_dimensionality_all_LMin_to_LMax(L_values=None, figs_dir=None,
+                                              epoch_time_ids=(-1, -1),
+                                              parameters_path='parameters.txt'):
+    """Side-by-side dimensionality plot for every L in parameters.txt (min..max)."""
+    if L_values is None:
+        L_values = L_values_from_parameters(parameters_path)
+    if figs_dir is None:
+        figs_dir = join(par.folder, 'figs')
+
+    L_min, L_max = min(L_values), max(L_values)
+    filename = f'SVDs_and_dimensionality_allL{L_min}toL{L_max}.svg'
+
+    L_panel_data = []
+    found_L = []
+    for L in L_values:
+        folder = join(par.folder, par.run_folder_name(L=L))
+        try:
+            L_panel_data.append(load_dimensionality_panel_data(L, epoch_time_ids))
+            found_L.append(L)
+            print(f"Loaded L={L} for combined plot: {folder}")
+        except (AssertionError, FileNotFoundError, OSError) as e:
+            print(f"Skipping L={L} for combined plot ({type(e).__name__}: {e})")
+
+    if not found_L:
+        print("No L runs available for combined dimensionality plot; skipping.")
+        return None
+
+    plot_SVDs_dimensionality_L_range(
+        L_panel_data,
+        found_L,
+        figs_dir,
+        filename=filename,
+    )
+    return filename
 
 
 def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR):
@@ -230,7 +349,7 @@ def plot_SVDs_recurrent_weights(all_rec_weights, all_rec_weights_proj, FIGS_DIR)
     ax.fill_between(np.arange(n_components)+1,
                     np.percentile(all_rec_S,5,axis=0)[:n_components],
                     np.percentile(all_rec_S,95,axis=0)[:n_components],
-                    ls='--', color='b', lw=0, alpha=.2, label='av S orig')
+                    color='b', lw=0, alpha=.2)
     # ax.plot(np.arange(n_components)+1, np.mean(all_rec_S_proj,axis=0)[:n_components], ls=':', c='r', lw=2, label='av S rot')
     S_mean = np.linalg.svd(np.mean(all_rec_weights, axis=0), compute_uv=False)
     S_mean_proj = np.linalg.svd(np.mean(all_rec_weights_proj, axis=0), compute_uv=False)
