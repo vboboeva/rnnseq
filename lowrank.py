@@ -165,6 +165,22 @@ plot_SVD_results(all_final_VEs, all_final_hs_proj, all_Rs, FIGS_DIR, n_component
 
 plot_alignment_SVs (all_rec_Vh_dot_U, FIGS_DIR)
 
+# Gauge-invariant overlap statistics between left/right singular vectors of W_rec.
+# (Averaging Vh@U across sims cancels by the sign gauge; see docs/plans/2026-11-02_sv-overlap-stats.md)
+if getattr(par, 'compute_sv_overlap', False):
+    import sv_overlap as svo
+    _K = 10
+    _ov = svo.compute_VU_overlap(np.stack(all_rec_Us), np.stack(all_rec_Ss), np.stack(all_rec_Vhs), _K)
+    _null = svo.rank_profile_null(par.n_hidden, seed=0)
+    _rps = {j: svo.rank_profile(_ov['M_full'], j, _null) for j in range(5)}
+    print(svo.summarize_rank_profile(_rps[0], _null))
+    _deg = svo.degeneracy_check(np.stack(all_rec_Ss), _ov['M_full'])
+    _tests = svo.test_overlap_entries(_ov['absM'], par.n_hidden)
+    svo.plot_rank_profile(_rps, _null, FIGS_DIR)
+    svo.plot_VU_partner(_rps[0], np.stack(all_rec_Ss), _deg, FIGS_DIR)
+    svo.plot_VU_overlap_stats(_ov, _tests, FIGS_DIR)
+    svo.plot_gauge_fixed_mean(_ov, FIGS_DIR)
+
 # Dimensionality reduces over time for any given class
 print('Compute and plot dimensionality over time')
 # separate the hidden-layer activity by class, at the end of learning and for all times in the sequence
