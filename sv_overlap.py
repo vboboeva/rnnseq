@@ -134,10 +134,11 @@ def summarize_rank_profile(rp, null):
         f"  top-1 sq. mass : mean {rp['mass1'].mean():.3f}  (cumulative top1/2/3/5: "
         f"{np.round(rp['cummass'][:, [0, 1, 2, 4]].mean(0), 3)})",
         f"  participation  : mean {rp['pr'].mean():.2f}  [5-95pct {np.percentile(rp['pr'], 5):.2f}, "
-        f"{np.percentile(rp['pr'], 95):.2f}]   null {null['pr'].mean():.1f}",
+        f"{np.percentile(rp['pr'], 95):.2f}]   full-N null {null['pr'].mean():.1f}  "
+        f"(NOT the effect size for a low-rank-ish W: see rank-restricted table)",
         f"  a1/a2          : median {np.median(rp['ratio']):.2f}, <1.3 in {(rp['ratio'] < 1.3).sum()}/{n}, "
         f">2 in {(rp['ratio'] > 2).sum()}/{n}",
-        f"  n_sig (>{null['thr_bonf']:.3f}) : counts for 0..5 = {np.bincount(ns, minlength=6)[:6]}  "
+        f"  n_sig (full-N Bonferroni >{null['thr_bonf']:.3f}) : counts for 0..5 = {np.bincount(ns, minlength=6)[:6]}  "
         f"(exactly one in {(ns == 1).sum()}/{n})",
         f"  winner index   : {_top_counts(rp['winner'])}",
     ]
@@ -167,6 +168,70 @@ def degeneracy_check(Ss, M_full, col=0, i2=1, i3=2):
     return dict(rho=rho, p=p, gap_mean_near_tie=float(gap[near].mean()) if near.any() else np.nan,
                 gap_mean_rest=float(gap[~near].mean()) if (~near).any() else np.nan,
                 n_near=int(near.sum()), gap=gap, ratio=ratio, winner=win)
+
+
+# ----------------------------------------------------------------------------------
+# rank-restricted null: is localization more than "u_j lives in the top few v's"?
+# ----------------------------------------------------------------------------------
+def spectrum_summary(Ss):
+    """Effective rank of W (participation of s^2 and of s) and the mean leading spectrum.
+    Answers 'what is r?' -- for a trained, full-rank W there is no clean value."""
+    p2 = Ss ** 2 / (Ss ** 2).sum(1, keepdims=True)
+    p1 = Ss / Ss.sum(1, keepdims=True)
+    # numerical rank: right singular vectors beyond it are an ARBITRARY basis of the kernel,
+    # so overlaps with them (and every full-N statistic) are meaningless for rank-constrained W
+    num_rank = float(np.mean((Ss > 1e-6 * Ss[:, :1]).sum(1)))
+    return dict(eff_rank_s2=float(np.mean(1.0 / np.sum(p2 ** 2, 1))),
+                eff_rank_s=float(np.mean(1.0 / np.sum(p1 ** 2, 1))),
+                num_rank=num_rank, s_mean=Ss.mean(0)[:12])
+
+
+def rank_restricted_null(r, n_draws=200000, seed=0):
+    """Null for u_j confined to the top-r right singular vectors: a uniform unit vector in R^r.
+    Statistics are computed on the renormalised squared overlaps p = g^2/|g|^2."""
+    rng = np.random.default_rng(seed)
+    g = rng.standard_normal((n_draws, r))
+    p = g ** 2 / np.sum(g ** 2, axis=1, keepdims=True)
+    sg = -np.sort(-np.abs(g), axis=1)
+    top1, pr, ratio = p.max(1), 1.0 / np.sum(p ** 2, 1), sg[:, 0] / sg[:, 1]
+    return dict(r=r, top1=top1, pr=pr, ratio=ratio,
+                top1_mean=top1.mean(), top1_sd=top1.std(),
+                pr_mean=pr.mean(), pr_sd=pr.std(), ratio_median=float(np.median(ratio)))
+
+
+def rank_restricted_stats(M_full, col=0, r_list=(3, 4, 5, 6, 8, 10, 15), n_draws=200000, seed=0):
+    """Per r: restrict u_col's overlap vector to the first r right singular vectors,
+    renormalise, and compare per-sim top-1 mass / participation ratio / a(1)/a(2) with
+    the uniform-in-R^r null. z and p come from the CLT on the sim-mean (n_sim independent
+    sims), so they do not floor at a bootstrap resolution. `mass_in_top_r` is kept as its
+    own statistic: it is the evidence about how low-rank the relation is."""
+    import pandas as pd
+    c = M_full[:, :, col]
+    n = c.shape[0]
+    mass = c ** 2
+    rows, per_sim = [], {}
+    for r in r_list:
+        m = mass[:, :r]
+        tot = m.sum(1)
+        p = m / tot[:, None]
+        top1, pr = p.max(1), 1.0 / np.sum(p ** 2, 1)
+        srt = -np.sort(-np.abs(c[:, :r]), 1)
+        ratio = srt[:, 0] / srt[:, 1]
+        nl = rank_restricted_null(r, n_draws, seed)
+        z_top1 = (top1.mean() - nl['top1_mean']) / (nl['top1_sd'] / np.sqrt(n))
+        z_pr = (nl['pr_mean'] - pr.mean()) / (nl['pr_sd'] / np.sqrt(n))   # smaller PR = more localized
+        rows.append(dict(
+            r=r, mass_in_top_r=tot.mean(),
+            top1_obs=top1.mean(), top1_null=nl['top1_mean'], top1_ratio=top1.mean() / nl['top1_mean'],
+            z_top1=z_top1, p_top1=stats.norm.sf(z_top1),
+            pr_obs=pr.mean(), pr_null=nl['pr_mean'], pr_ratio=pr.mean() / nl['pr_mean'],
+            z_pr=z_pr, p_pr=stats.norm.sf(z_pr),
+            ratio_obs=float(np.median(ratio)), ratio_null=nl['ratio_median']))
+        per_sim[r] = dict(top1=top1, pr=pr, ratio=ratio, mass_in_top_r=tot)
+    df = pd.DataFrame(rows)
+    df.attrs['per_sim'] = per_sim
+    df.attrs['col'] = col
+    return df
 
 
 # ----------------------------------------------------------------------------------
@@ -299,7 +364,9 @@ def plot_rank_profile(rps, null, out_dir, crosssim_rp=None, fname='recurrent_VU_
     ax.hist(rp['ratio'], bins=np.linspace(1, max(4, np.percentile(rp['ratio'], 99)), 25),
             color=C_OBS, alpha=.85)
     ax.axvline(np.median(rp['ratio']), c=C_ACC, lw=1)
-    ax.set_xlabel('a(1)/a(2)  (null median %.2f)' % np.median(null['a1'] / null['a2']))
+    # null medians restricted to the top-r right singular vectors (the full-N null, ~1.1, is too weak)
+    nm = {r_: rank_restricted_null(r_, 20000, 0)['ratio_median'] for r_ in (5, 10)}
+    ax.set_xlabel('a(1)/a(2)  (null median: r=5 %.2f, r=10 %.2f)' % (nm[5], nm[10]), fontsize=8)
     ax.set_ylabel('# sims')
     ax2 = ax.inset_axes([.55, .45, .4, .45])
     ax2.hist(rp['n_sig'], bins=np.arange(-.5, 8.5), color=C_OBS, alpha=.85)
@@ -322,6 +389,49 @@ def plot_rank_profile(rps, null, out_dir, crosssim_rp=None, fname='recurrent_VU_
         a.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax2.xaxis.set_major_locator(MaxNLocator(integer=True))
     for a in axs:
+        for sp in ('top', 'right'):
+            a.spines[sp].set_visible(False)
+    fig.tight_layout(w_pad=3)
+    fig.savefig(join(out_dir, fname), dpi=200)
+    plt.close(fig)
+
+
+def plot_rank_restricted(rr, Ss, out_dir, fname='recurrent_VU_rank_restricted.svg'):
+    """Localization vs the rank-restricted null, as a function of r (no privileged r)."""
+    plt = _plt()
+    ps = rr.attrs['per_sim']
+    r = rr['r'].values
+    fig, axs = plt.subplots(1, 4, figsize=(15, 3.4))
+
+    def band(ax, key, obs_col, null_col, ylabel, title):
+        arr = np.stack([ps[int(k)][key] for k in r])                       # (n_r, n_sim)
+        ax.fill_between(r, np.percentile(arr, 5, axis=1), np.percentile(arr, 95, axis=1),
+                        color=C_OBS, alpha=.2, lw=0)
+        ax.plot(r, rr[obs_col], c=C_OBS, lw=2, marker='o', ms=4, label='observed (mean over sims)')
+        ax.plot(r, rr[null_col], c=C_NULL, lw=1.6, ls='--', marker='o', ms=3, label='uniform in top-r null')
+        ax.set_xlabel('r  (restrict to top-r right singular vectors)')
+        ax.set_ylabel(ylabel); ax.set_title(title, fontsize=9)
+
+    ax = axs[0]
+    arr = np.stack([ps[int(k)]['mass_in_top_r'] for k in r])
+    ax.fill_between(r, np.percentile(arr, 5, axis=1), np.percentile(arr, 95, axis=1), color=C_OBS, alpha=.2, lw=0)
+    ax.plot(r, rr['mass_in_top_r'], c=C_OBS, lw=2, marker='o', ms=4)
+    ax.plot(r, r / Ss.shape[1], c=C_NULL, lw=1.6, ls='--', label='chance r/N')
+    ax.set_ylim(0, 1); ax.set_xlabel('r'); ax.set_ylabel(r'fraction of $|u_1|^2$ in top-r $v$')
+    ax.set_title('(a) how low-rank is the relation?', fontsize=9)
+    ax.legend(fontsize=6.5, frameon=False, loc='lower right')
+    ins = ax.inset_axes([.55, .25, .4, .35])
+    ins.plot(np.arange(1, 13), Ss.mean(0)[:12], c=C_OBS, marker='o', ms=2.5, lw=1)
+    ins.set_title('mean spectrum', fontsize=6.5); ins.tick_params(labelsize=6)
+
+    band(axs[1], 'top1', 'top1_obs', 'top1_null', 'top-1 share of squared overlap', '(b) dominant partner')
+    band(axs[2], 'pr', 'pr_obs', 'pr_null', 'participation ratio', '(c) participation (lower = localized)')
+    band(axs[3], 'ratio', 'ratio_obs', 'ratio_null', 'a(1)/a(2)', '(d) dominance ratio (median shown)')
+    axs[1].legend(fontsize=6.5, frameon=False)
+    axs[3].set_ylim(1, 6)   # per-sim ratio has a long upper tail; clip so the medians are readable
+    from matplotlib.ticker import MaxNLocator
+    for a in axs:
+        a.xaxis.set_major_locator(MaxNLocator(integer=True))
         for sp in ('top', 'right'):
             a.spines[sp].set_visible(False)
     fig.tight_layout(w_pad=3)
@@ -446,6 +556,24 @@ def selftest(seed=0):
     assert big['mean'][0] - big['mean'][4] < .08, 'null profile should be flat'
     # BH sanity
     assert np.allclose(fdr_bh([0.01, 0.04, 0.03, 0.005]), [0.02, 0.04, 0.04, 0.02])
+    # rank-restricted null: closed form in the plane, E[max(cos^2, sin^2)] = 1/2 + 1/pi
+    n2 = rank_restricted_null(2, 400000, 0)
+    assert abs(n2['top1_mean'] - (0.5 + 1 / np.pi)) < 5e-3, n2['top1_mean']
+    # ... and for large r it approaches the full-N column null (compare participation ratio)
+    assert abs(rank_restricted_null(160, 20000, 0)['pr_mean'] - big['pr'].mean()) < 3
+    # new statistics are gauge invariant and mass_in_top_r is monotone, equal to 1 at r=N
+    rra = rank_restricted_stats(a['M_full'], 0, (2, 3, 5), 5000)
+    rrb = rank_restricted_stats(b['M_full'], 0, (2, 3, 5), 5000)
+    for key in ('top1_obs', 'pr_obs', 'ratio_obs', 'mass_in_top_r'):
+        assert np.allclose(rra[key], rrb[key]), key
+    assert np.all(np.diff(rra['mass_in_top_r']) >= -1e-12)
+    full = rank_restricted_stats(a['M_full'], 0, (N,), 5000)
+    assert np.allclose(full['mass_in_top_r'], 1.0)
+    sp = spectrum_summary(S)
+    assert 1 <= sp['eff_rank_s2'] <= sp['eff_rank_s'] <= N
+    assert sp['num_rank'] == N                                   # generic random W is full rank
+    S3 = S.copy(); S3[:, 3:] = 0
+    assert spectrum_summary(S3)['num_rank'] == 3                 # truncated spectrum detected
     print('selftest OK: all statistics are gauge-invariant; null profile flat; PR_null=%.1f (N/3=%.1f)'
           % (big['pr'].mean(), 160 / 3))
 
@@ -492,8 +620,22 @@ def run(data_dir, out_dir, K=10, col=0, n_controls=5, calibrate=True):
           f"near-ties {deg['n_near']}/{n_sim}, mean gap near-tie {deg['gap_mean_near_tie']:.3f} vs rest {deg['gap_mean_rest']:.3f}")
     if calibrate:
         print('surrogate calibration (Haar U,V, observed S):',
-              surrogate_calibration(Ss, null, n=100, K=K))
+              surrogate_calibration(Ss, null, n=400, K=K))
 
+    # rank-restricted null: the full-N null above is too weak for a low-rank-ish W
+    sp = spectrum_summary(Ss)
+    print(f"\nspectrum: mean s1..s12 = {np.round(sp['s_mean'], 2)}; effective rank "
+          f"{sp['eff_rank_s2']:.1f} (s^2) / {sp['eff_rank_s']:.1f} (s) -- no privileged r")
+    if sp['num_rank'] < N - 0.5:
+        print(f"  WARNING: W is numerically rank {sp['num_rank']:.0f} < N={N}. Right singular vectors "
+              f"beyond that are an arbitrary kernel basis: the full-N statistics above are NOT "
+              f"meaningful; use the rank-restricted table with r <= {sp['num_rank']:.0f}.")
+    rr = rank_restricted_stats(ov['M_full'], col)
+    print(f'\nrank-restricted null (u_{col+1} confined to top-r right singular vectors):')
+    print(rr.to_string(index=False, float_format=lambda x: f'{x:.3g}'))
+    rr.to_csv(join(out_dir, 'recurrent_VU_rank_restricted.csv'), index=False)
+
+    plot_rank_restricted(rr, Ss, out_dir)
     plot_rank_profile(rps, null, out_dir, crosssim_rp=cross_rp)
     plot_VU_partner(rps[col], Ss, deg, out_dir)
     plot_VU_overlap_stats(ov, tests, out_dir)

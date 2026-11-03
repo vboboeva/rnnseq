@@ -27,9 +27,49 @@
 > 6. **Not yet done**: replication on `test_ablate_sv` / N=320 / N=64 / `initRich`;
 >    `lowrank.py` in this worktree still looks for a `_noise0.000` folder suffix that the
 >    `outBiasTrue` directories do not have, so the wiring there is untested end-to-end.
->    Observed in the a(1)-vs-a(2) scatter: the two are strongly anti-correlated, which
->    hints that u₁ rotates within a (v₂,v₃) plane at a sim-dependent angle — a hypothesis,
->    untested.
+>    ~~Observed in the a(1)-vs-a(2) scatter: the two are strongly anti-correlated, which
+>    hints that u₁ rotates within a (v₂,v₃) plane at a sim-dependent angle.~~ **Retracted**
+>    (see 9).
+> 7. **The full-N participation ratio is the wrong effect size.** "PR 4.0 vs 55" compares
+>    with a random vector in all N=160 dimensions, which ignores that W is low-rank-ish; a
+>    small PR is unsurprising if u₁ lives in the top few right singular vectors. The
+>    relevant null is a uniform unit vector in the top-r right singular vectors
+>    (`rank_restricted_stats`, figure `recurrent_VU_rank_restricted.svg`). Against it,
+>    localization still beats chance at every r tested (3–15), but the effect is modest and
+>    r-dependent: top-1 share obs/null = 0.825/0.701 (r=3), 0.717/0.555 (r=5), 0.637/0.380
+>    (r=10), 0.608/0.296 (r=15), i.e. **1.18× to 2.05×**; participation ratio 1.40/1.81
+>    (r=3) to 2.56/6.10 (r=15); median a(1)/a(2) 2.58/1.69 (r=3) to 1.82/1.20 (r=15). The
+>    CLT z-scores are 7.5–34; read them as "decisive", not as literal p-values (the
+>    Gaussian tail is an extrapolation at z≈34).
+> 8. **W is not rank 5 here, so there is no privileged r.** Mean s₁…s₁₂ =
+>    7.10 5.27 4.90 4.66 4.50 4.37 4.24 4.11 3.99 3.85 3.70 3.50; effective rank 28.9
+>    (from s²) / 81.9 (from s). Only 57% / 68% / 77% / 81% of |u₁|² lies in the top
+>    3 / 5 / 10 / 15 right singular vectors. The whole r-range is therefore the result;
+>    do not quote a single r.
+> 9. **Retraction of the (v₂,v₃) rotation hint.** Mass of u₁ in span(v₂,v₃) is
+>    0.57 ± 0.17 (min 0.009); a rotation within a fixed plane would keep it constant. The
+>    within-plane angle is roughly uniform, with a mild lean toward v₂ (median 33.5° vs
+>    45°). The a(1)–a(2) anti-correlation is at least partly the normalisation constraint
+>    Σᵢ M[i,0]² = 1 (not tested beyond that).
+>
+> 10. **Rank-3 check (one dataset, read-only):** `test_ablate_sv/…nepochs51…fractrain1.0…
+>    datasplit0_maxrank3_0`, where W is exactly rank 3 (s₄/s₁ ≈ 1e-8; mean s₁₋₃ =
+>    11.13, 5.62, 4.69), so r=3 is the *correct* null. There the localization is **barely
+>    above it**: top-1 share 0.743 vs 0.701 null (1.06×, z=2.5), PR 1.68 vs 1.81 (z=2.5),
+>    median a(1)/a(2) 2.03 vs 1.69; at r=5/10 (not meaningful, v₄₊ are a kernel basis) the
+>    apparent effect is inflated (z=11/25). What *is* far above chance is u₁'s overlap with
+>    the row space: 0.181 of |u₁|² lies in span(v₁,v₂,v₃) vs 3/160 ≈ 0.019 chance (~10×).
+>    Winner identity is again v₂ 58 / v₃ 34 of 100. So for a rank-constrained W the claim
+>    reduces to "u₁ overlaps the row space ~10× chance, mostly via v₂/v₃", not "one
+>    dominant partner beyond what rank-3 forces". The full-N statistics are meaningless
+>    there (a(1)>null max in only 28% of sims), and `run()` now prints a warning when
+>    numerical rank < N. This does not carry over to the full-rank `outBiasTrue` runs, which
+>    are a different training setup (51 vs 101 epochs, rank constraint vs none).
+>
+> What can be claimed: u₁ is more concentrated on a few right singular vectors than a
+> random direction in any matched 3–15 dimensional subspace, with dominant partner v₂ in
+> 59/100 sims and v₃ in 33/100. Do **not** claim u₁ is confined to a rank-5 subspace or
+> has a single clean partner.
 
 Target: worktree `/ceph/akrami/Vizhe/RNN_worktrees/uv-proj`, branch `uv-proj`.
 Style: **exploratory diagnostic first** — get the statistics right and readable, polish later.
@@ -153,7 +193,8 @@ Seven things fall out, all of which the plan must capture:
 
 Goal: a figure + numbers stating "in 100/100 seeds `u₁` has a single dominant partner
 with `|v·u₁| ≥ 0.47` (chance max 0.23), carrying 49% of `u₁` and ~1.9× the runner-up;
-the overlap profile has an effective width of ~4 of 160 modes vs ~55 under chance; the
+the overlap profile has an effective width of ~4 of 160 modes (vs ~55 for a random
+vector in all N dims — a weak null for a low-rank-ish W; see status box items 7–8); the
 dominant partner is v₂ in 59/100 seeds and v₃ in 33/100, and this is not explained by
 near-degeneracy of s₂,s₃."
 
