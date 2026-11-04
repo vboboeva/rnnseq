@@ -523,7 +523,7 @@ def plot_gauge_fixed_mean(ov, out_dir, col=0, fname='recurrent_VU_gaugefixed.svg
 
 
 def plot_paper_panels(ov, rp, out_dir, col=0, fname='recurrent_VU_paper_panels.svg',
-                      figsize=(4.6, 2.0)):
+                      panel_h=1.1, right_w=1.5):
     """Compact two-panel figure for use as small panels inside a larger paper figure.
 
     Left : mean over sims of D M D (gauge: column u_{col+1} >= 0), K x K.
@@ -547,23 +547,44 @@ def plot_paper_panels(ov, rp, out_dir, col=0, fname='recurrent_VU_paper_panels.s
     rc = {'font.size': 8, 'axes.labelsize': 8, 'xtick.labelsize': 7, 'ytick.labelsize': 7,
           'axes.linewidth': .6, 'xtick.major.width': .6, 'ytick.major.width': .6,
           'xtick.major.size': 2.5, 'ytick.major.size': 2.5, 'axes.labelpad': 1.5}
+    # Layout in inches so the geometry is exact: the left axes is a panel_h x panel_h square
+    # (aspect='equal' => square K x K cells), the right axes has the SAME height but is wider
+    # (aspect='auto': 100 sims x K columns). Each has a colorbar of the same height.
+    h, cb_w, cb_pad, cb_lab = panel_h, .09, .06, .33          # colorbar width, gap, tick-label room
+    left_m, mid_m, bot_m, top_m, right_m = .42, .52, .40, .06, .05
+    x0 = left_m
+    x_cb0 = x0 + h + cb_pad
+    x1 = x_cb0 + cb_w + cb_lab + mid_m                          # right axes (room for its ylabel/ticks)
+    x_cb1 = x1 + right_w + cb_pad
+    W, H = x_cb1 + cb_w + cb_lab + right_m, bot_m + h + top_m
+    ticks = [i for i in (0, 4, K - 1) if i < K]
+
     with plt.rc_context(rc):
-        fig, axs = plt.subplots(1, 2, figsize=figsize,
-                                gridspec_kw=dict(wspace=.75, left=.085, right=.925, bottom=.2, top=.96))
-        ticks = [i for i in (0, 4, K - 1) if i < K]
-        for ax, X, xl, yl in ((axs[0], Mg.mean(0), 'U id', 'V id'),
-                              (axs[1], raster[order], 'V id', 'Simulation')):
+        fig = plt.figure(figsize=(W, H))
+        specs = ((x0, h, x_cb0, Mg.mean(0), 'equal', 'U id', 'V id'),
+                 (x1, right_w, x_cb1, raster[order], 'auto', 'V id', 'Simulation'))
+        axs = []
+        for xa, wa, xc, X, asp, xl, yl in specs:
+            ax = fig.add_axes([xa / W, bot_m / H, wa / W, h / H])
+            cax = fig.add_axes([xc / W, bot_m / H, cb_w / W, h / H])
             v = float(np.abs(X).max())
-            im = ax.imshow(X, cmap='PiYG', vmin=-v, vmax=v, aspect='auto', interpolation='nearest')
+            im = ax.imshow(X, cmap='PiYG', vmin=-v, vmax=v, aspect=asp, interpolation='nearest')
             ax.set_xlabel(xl); ax.set_ylabel(yl)
             ax.set_xticks(ticks); ax.set_xticklabels([str(t + 1) for t in ticks])
-            cb = fig.colorbar(im, ax=ax, fraction=.07, pad=.04, aspect=14)
-            vt = np.floor(v * 10) / 10                                  # round DOWN so ticks stay inside the range
+            cb = fig.colorbar(im, cax=cax)
+            vt = np.floor(v * 10) / 10                          # round DOWN so ticks stay inside the range
             cb.set_ticks([-vt, 0, vt]); cb.ax.tick_params(labelsize=6.5, width=.5, length=2)
             cb.outline.set_linewidth(.5)
+            axs.append(ax)
         axs[0].set_yticks(ticks); axs[0].set_yticklabels([str(t + 1) for t in ticks])
         axs[1].set_yticks([0, n_sim - 1]); axs[1].set_yticklabels(['1', str(n_sim)])
-        fig.savefig(join(out_dir, fname))                              # svg: no dpi needed
+        # same height, equal aspect on the left: verify rather than trust
+        b0, b1 = axs[0].get_position(), axs[1].get_position()
+        assert abs(b0.height - b1.height) < 1e-9, 'panels must share a height'
+        fig.canvas.draw()
+        bb = axs[0].get_window_extent()
+        assert abs(bb.width - bb.height) < 1.0, 'left panel must be square (equal aspect)'
+        fig.savefig(join(out_dir, fname))                       # svg: no dpi needed
         plt.close(fig)
     return Mg
 
