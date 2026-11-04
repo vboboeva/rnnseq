@@ -522,6 +522,52 @@ def plot_gauge_fixed_mean(ov, out_dir, col=0, fname='recurrent_VU_gaugefixed.svg
     plt.close(fig)
 
 
+def plot_paper_panels(ov, rp, out_dir, col=0, fname='recurrent_VU_paper_panels.svg',
+                      figsize=(4.6, 2.0)):
+    """Compact two-panel figure for use as small panels inside a larger paper figure.
+
+    Left : mean over sims of D M D (gauge: column u_{col+1} >= 0), K x K.
+    Right: per-sim first column of D M D, i.e. the single-sim version of the left panel's
+           first column. Rows = sims grouped by which right singular vector wins, columns =
+           right singular vector index. Under this gauge the column is |v_i . u_1| for i != col
+           (non-negative by construction) and keeps its sign only for the diagonal entry i == col,
+           so the 'negative' half of the colormap is almost unused here by design.
+    Same colormap as the averaged V.U imshow (PiYG, symmetric limits, per panel)."""
+    plt = _plt()
+    M = ov['M']
+    K = M.shape[1]
+    Mg = gauge_fix_by_column(M, col)                                   # (n_sim, K, K)
+    raster = Mg[:, :, col]                                             # (n_sim, K)
+    off = np.arange(K) != col
+    assert np.allclose(raster[:, off], np.abs(M[:, off, col])), 'gauge fix should give |M[i,col]|'
+    assert np.allclose(raster.mean(0), Mg.mean(0)[:, col])             # raster averages to panel-a column
+    order = np.lexsort((-rp['a1'], rp['winner']))                      # group by winner, strongest first
+    n_sim = raster.shape[0]
+
+    rc = {'font.size': 8, 'axes.labelsize': 8, 'xtick.labelsize': 7, 'ytick.labelsize': 7,
+          'axes.linewidth': .6, 'xtick.major.width': .6, 'ytick.major.width': .6,
+          'xtick.major.size': 2.5, 'ytick.major.size': 2.5, 'axes.labelpad': 1.5}
+    with plt.rc_context(rc):
+        fig, axs = plt.subplots(1, 2, figsize=figsize,
+                                gridspec_kw=dict(wspace=.75, left=.085, right=.925, bottom=.2, top=.96))
+        ticks = [i for i in (0, 4, K - 1) if i < K]
+        for ax, X, xl, yl in ((axs[0], Mg.mean(0), 'U id', 'V id'),
+                              (axs[1], raster[order], 'V id', 'Simulation')):
+            v = float(np.abs(X).max())
+            im = ax.imshow(X, cmap='PiYG', vmin=-v, vmax=v, aspect='auto', interpolation='nearest')
+            ax.set_xlabel(xl); ax.set_ylabel(yl)
+            ax.set_xticks(ticks); ax.set_xticklabels([str(t + 1) for t in ticks])
+            cb = fig.colorbar(im, ax=ax, fraction=.07, pad=.04, aspect=14)
+            vt = np.floor(v * 10) / 10                                  # round DOWN so ticks stay inside the range
+            cb.set_ticks([-vt, 0, vt]); cb.ax.tick_params(labelsize=6.5, width=.5, length=2)
+            cb.outline.set_linewidth(.5)
+        axs[0].set_yticks(ticks); axs[0].set_yticklabels([str(t + 1) for t in ticks])
+        axs[1].set_yticks([0, n_sim - 1]); axs[1].set_yticklabels(['1', str(n_sim)])
+        fig.savefig(join(out_dir, fname))                              # svg: no dpi needed
+        plt.close(fig)
+    return Mg
+
+
 # ----------------------------------------------------------------------------------
 # self test: every reported statistic must be invariant under the sign gauge
 # ----------------------------------------------------------------------------------
@@ -640,6 +686,7 @@ def run(data_dir, out_dir, K=10, col=0, n_controls=5, calibrate=True):
     plot_VU_partner(rps[col], Ss, deg, out_dir)
     plot_VU_overlap_stats(ov, tests, out_dir)
     plot_gauge_fixed_mean(ov, out_dir, col)
+    plot_paper_panels(ov, rps[col], out_dir, col=col)
     tests.to_csv(join(out_dir, 'recurrent_VU_entry_tests.csv'), index=False)
     print('\nfigures + csv written to', out_dir)
     return dict(ov=ov, null=null, rps=rps, tests=tests, deg=deg)
@@ -653,10 +700,21 @@ if __name__ == '__main__':
     ap.add_argument('--col', type=int, default=0)
     ap.add_argument('--K', type=int, default=10)
     ap.add_argument('--no-calibrate', action='store_true')
+    ap.add_argument('--panels-only', action='store_true',
+                    help='only write the compact paper-panel figure (fast; needs --data-dir and --out)')
     args = ap.parse_args()
     if args.selftest:
         selftest()
-    if args.data_dir:
+    if args.data_dir and args.panels_only:
+        assert args.out, '--panels-only needs --out (do not write into someone else\'s data tree)'
+        os.makedirs(args.out, exist_ok=True)
+        _Ws = load_rec_weights(args.data_dir)
+        _Us, _Ss, _Vhs = svd_all(_Ws)
+        _ov = compute_VU_overlap(_Us, _Ss, _Vhs, args.K)
+        _rp = rank_profile(_ov['M_full'], args.col)
+        plot_paper_panels(_ov, _rp, args.out, col=args.col)
+        print('wrote', join(args.out, 'recurrent_VU_paper_panels.svg'))
+    elif args.data_dir:
         out = args.out or join(os.path.dirname(os.path.abspath(args.data_dir)), 'figs',
                                os.path.basename(os.path.abspath(args.data_dir)))
         run(args.data_dir, out, K=args.K, col=args.col, calibrate=not args.no_calibrate)
