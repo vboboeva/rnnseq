@@ -3,7 +3,7 @@
 Code: `sv_pc_link.py` (branch `sv-pc-link`). Plan: `2026-11-04_sv-pc-link.md`.
 Figures, CSV and the full printout are in
 `outBiasTrue/figs/TaskRNNClass_N160_nlatent10_L0_m2_alpha10_nepochs101_ntypes7_fractrain1.0_objCE_initNone_transferrelu_cuesize4_delay0_datasplit0/`
-as `svpc_{scatter,overlap,decoding,time}.svg`, `svpc_axis_summary.csv`, `svpc_run.log`
+as `svpc_{scatter_sv,scatter_pc,overlap,decoding,time}.svg`, `svpc_axis_summary.csv`, `svpc_run.log`
 (same directory as the `recurrent_VU_*.svg` figures).
 
 Setup: last saved epoch (key 100), last timestep, 630 train sequences per sim, 100 sims.

@@ -374,33 +374,39 @@ def _clean(axs):
             a.spines[sp].set_visible(False)
 
 
-def plot_scatter(sim_data, ctx, out_dir, fname='svpc_scatter.svg'):
-    """sim_data: list of (sim_id, Zs (n,3), Zp (n,3)). SV planes coloured by transition,
-    PC planes coloured by the 7 classes."""
+def _scatter_planes(sim_data, ctx, out_dir, fname, family, axis_col):
+    """One figure: rows = sims, columns = the planes (1,2), (1,3), (2,3) of the first three
+    axes of `family` ('SV' or 'PC'). Points coloured by class; each class centroid is drawn
+    as a larger star in the same colour."""
     plt = _plt()
     from matplotlib.lines import Line2D
-    bits, cid = ctx['bits'], ctx['cid']
+    cid, names = ctx['cid'], ctx['names']
+    planes = [(0, 1), (0, 2), (1, 2)]
     nr = len(sim_data)
-    fig, axs = plt.subplots(nr, 6, figsize=(17, 2.9 * nr), squeeze=False)
-    for r, (sid, Zs, Zp) in enumerate(sim_data):
-        specs = [(Zs, 0, 1, 'SV', 'latest'), (Zs, 0, 1, 'SV', 'previous'), (Zs, 1, 2, 'SV', 'previous'),
-                 (Zp, 0, 1, 'PC', 'class'), (Zp, 0, 2, 'PC', 'class'), (Zp, 1, 2, 'PC', 'class')]
-        for c, (Z, i, j, nm, col) in enumerate(specs):
+    fig, axs = plt.subplots(nr, 3, figsize=(10.5, 3.2 * nr), squeeze=False)
+    for r, row in enumerate(sim_data):
+        sid, Z = row[0], row[axis_col]
+        for c, (i, j) in enumerate(planes):
             ax = axs[r, c]
-            if col == 'class':
-                colors = [C_CLASS[k] for k in cid]
-            else:
-                colors = [C_DIFF if b else C_SAME for b in bits[:, LABELS.index(col)]]
-            ax.scatter(Z[:, i], Z[:, j], c=colors, s=5, alpha=.55, lw=0)
-            ax.set_xlabel(f'{nm}{i + 1}'); ax.set_ylabel(f'{nm}{j + 1}')
-            ax.set_title(f'sim {sid}: {nm}{i + 1}-{nm}{j + 1}, colour = {col}', fontsize=8)
-    h_t = [Line2D([], [], marker='o', ls='', c=C_SAME, label='same (AA)'),
-           Line2D([], [], marker='o', ls='', c=C_DIFF, label='different (AB)')]
-    h_c = [Line2D([], [], marker='o', ls='', c=C_CLASS[k], label=ctx['names'][k]) for k in range(len(ctx['names']))]
-    axs[0, 2].legend(handles=h_t, fontsize=6.5, frameon=False, loc='lower left', bbox_to_anchor=(0.0, 1.0), ncol=2)
-    axs[0, 5].legend(handles=h_c, fontsize=6.5, frameon=False, loc='upper left', bbox_to_anchor=(1.02, 1.0))
+            ax.scatter(Z[:, i], Z[:, j], c=[C_CLASS[k] for k in cid], s=5, alpha=.5, lw=0)
+            for k in range(len(names)):
+                m = cid == k
+                ax.scatter(Z[m, i].mean(), Z[m, j].mean(), marker='*', s=150, c=C_CLASS[k],
+                           edgecolors='k', linewidths=.8, zorder=5)
+            ax.set_xlabel(f'{family}{i + 1}'); ax.set_ylabel(f'{family}{j + 1}')
+            ax.set_title(f'sim {sid}: {family}{i + 1} - {family}{j + 1}', fontsize=9)
+    handles = [Line2D([], [], marker='o', ls='', c=C_CLASS[k], label=names[k]) for k in range(len(names))]
+    handles.append(Line2D([], [], marker='*', ls='', c='w', mec='k', ms=10, label='class centroid'))
+    axs[0, 2].legend(handles=handles, fontsize=7, frameon=False, loc='upper left', bbox_to_anchor=(1.02, 1.0))
     _clean(axs); fig.tight_layout()
     fig.savefig(join(out_dir, fname), dpi=200, bbox_inches='tight'); plt.close(fig)
+
+
+def plot_scatter(sim_data, ctx, out_dir):
+    """sim_data: list of (sim_id, Zs (n,3), Zp (n,3)). Two figures, both coloured by the 7
+    classes with a same-coloured centroid per class: SV planes and PC planes."""
+    _scatter_planes(sim_data, ctx, out_dir, 'svpc_scatter_sv.svg', 'SV', 1)
+    _scatter_planes(sim_data, ctx, out_dir, 'svpc_scatter_pc.svg', 'PC', 2)
 
 
 def plot_overlap(s, out_dir, fname='svpc_overlap.svg'):
