@@ -276,10 +276,11 @@ def summarize(res, ctx, K=10, show=6):
     s['win_sv'] = s['eta_sv'].argmax(1)                                      # (n, 3): winning SV per label
     s['win_pc'] = s['eta_pc'][:, :N].argmax(1)
     lab = ctx['label_idx']
-    s['best_label_sv'] = np.where(np.isin(s['best_sv'][:, :, None], lab), np.argmax(
-        s['best_sv'][:, :, None] == np.array(lab)[None, None, :], axis=2), -1)   # (n,N) 0..2 or -1
-    s['best_label_pc'] = np.where(np.isin(s['best_pc'][:, :, None], lab), np.argmax(
-        s['best_pc'][:, :, None] == np.array(lab)[None, None, :], axis=2), -1)
+    for tag in ('sv', 'pc'):                                                 # which labelled split is each axis' best?
+        b = np.full(s[f'best_{tag}'].shape, -1)                              # -1 = some other 3-vs-4 split
+        for l, idx in enumerate(lab):
+            b[s[f'best_{tag}'] == idx] = l
+        s[f'best_label_{tag}'] = b
     return s
 
 
@@ -320,15 +321,23 @@ def print_summary(s):
           f'|cos(SV_1..3, mean direction)| = {f(s["cos_mean"].mean(0))}')
 
 
+def lag_ranks(E):
+    """For each lag l: rank (1 = highest) of the predicted SV_{l+1} among the Kt SVs, by eta2.
+    Needed because the summed diagonal statistic can be carried by the first lags alone."""
+    return [1 + int((E[:, l] > E[l, l] + 1e-12).sum()) for l in range(E.shape[1])]
+
+
 def print_time(E_by_t, per_sim_win=None):
     print('\ntime-resolved: mean eta2 of SV_1..Kt (rows) with lag0 (latest so far) .. lag(t-1) (cols)')
     rows = []
     for t, E in enumerate(E_by_t, start=1):
         D, rank, nm, best, Db = diagonal_test(E)
+        lr = lag_ranks(E)
         print(f'  t={t}:\n{np.array2string(E, precision=2, suppress_small=True)}')
         print(f'     diagonal (lag l on SV_l+1) sum = {D:.2f}; rank of identity among {nm} assignments = {rank}'
               f' (1 = best); best assignment lag->SV {[b + 1 for b in best]} sum = {Db:.2f}')
-        rows.append((t, D, rank, nm, Db))
+        print(f'     per-lag rank of the predicted SV among the {E.shape[0]} SVs (1 = highest): {lr}')
+        rows.append((t, D, rank, nm, Db, lr))
     return rows
 
 
@@ -388,10 +397,10 @@ def plot_scatter(sim_data, ctx, out_dir, fname='svpc_scatter.svg'):
     h_t = [Line2D([], [], marker='o', ls='', c=C_SAME, label='same (AA)'),
            Line2D([], [], marker='o', ls='', c=C_DIFF, label='different (AB)')]
     h_c = [Line2D([], [], marker='o', ls='', c=C_CLASS[k], label=ctx['names'][k]) for k in range(len(ctx['names']))]
-    axs[0, 2].legend(handles=h_t, fontsize=6.5, frameon=False, loc='best')
-    axs[0, 5].legend(handles=h_c, fontsize=6.5, frameon=False, ncol=2, loc='best')
+    axs[0, 2].legend(handles=h_t, fontsize=6.5, frameon=False, loc='lower left', bbox_to_anchor=(0.0, 1.0), ncol=2)
+    axs[0, 5].legend(handles=h_c, fontsize=6.5, frameon=False, loc='upper left', bbox_to_anchor=(1.02, 1.0))
     _clean(axs); fig.tight_layout()
-    fig.savefig(join(out_dir, fname), dpi=200); plt.close(fig)
+    fig.savefig(join(out_dir, fname), dpi=200, bbox_inches='tight'); plt.close(fig)
 
 
 def plot_overlap(s, out_dir, fname='svpc_overlap.svg'):
@@ -469,7 +478,7 @@ def plot_decoding(s, out_dir, fname='svpc_decoding.svg'):
         ax.bar(range(len(cols)), vals, bottom=bottoms, color=C_LABEL[name], label=name); bottoms += vals
     ax.set_xticks(range(len(cols))); ax.set_xticklabels([f'{t.upper()}{k + 1}' for t, k in cols], fontsize=7)
     ax.set_ylabel('fraction of sims'); ax.set_title('(f) best 3-vs-4 class split along the axis', fontsize=9)
-    ax.legend(fontsize=6.5, frameon=False, ncol=2)
+    ax.legend(fontsize=6.5, frameon=False, ncol=4, loc='upper center', bbox_to_anchor=(0.5, -0.1))
     _clean(axs); fig.tight_layout(w_pad=2.5)
     fig.savefig(join(out_dir, fname), dpi=200); plt.close(fig)
 
@@ -481,7 +490,7 @@ def plot_time(E_by_t, rows, out_dir, fname='svpc_time.svg'):
     for i, E in enumerate(E_by_t):
         ax = axs[0, i]
         im = ax.imshow(E.T, cmap='Blues', vmin=0, vmax=1, aspect='auto', interpolation='nearest')
-        t, D, rank, nm, Db = rows[i]
+        t, D, rank, nm, Db, lr = rows[i]
         for l in range(E.shape[1]):
             ax.add_patch(plt.Rectangle((l - .5, l - .5), 1, 1, fill=False, ec=C_ACC, lw=1.5))
         for a in range(E.shape[1]):
@@ -489,7 +498,7 @@ def plot_time(E_by_t, rows, out_dir, fname='svpc_time.svg'):
                 ax.text(b, a, f'{E[b, a]:.2f}', ha='center', va='center', fontsize=7, color='w' if E[b, a] > .5 else 'k')
         ax.set_xticks(range(E.shape[0])); ax.set_xticklabels(range(1, E.shape[0] + 1)); ax.set_xlabel('SV index')
         ax.set_yticks(range(E.shape[1])); ax.set_yticklabels([f'lag{l}' for l in range(E.shape[1])])
-        ax.set_title(f'time t={t}: identity rank {rank}/{nm}', fontsize=9)
+        ax.set_title(f'time t={t}: identity rank {rank}/{nm}; per-lag rank of predicted SV {lr}', fontsize=8)
         fig.colorbar(im, ax=ax, fraction=.046, pad=.03)
     fig.suptitle(r'mean $\eta^2$(SV coordinate at time t, transition lag l); red = predicted copying diagonal', fontsize=9)
     fig.tight_layout(); fig.savefig(join(out_dir, fname), dpi=200); plt.close(fig)
